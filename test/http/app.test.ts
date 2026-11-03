@@ -92,6 +92,12 @@ describe("operations routes (public)", () => {
     const docs = await request(app).get("/docs/").expect(200);
     expect(docs.text).toContain("swagger-ui");
   });
+
+  it("does not force https for sub-resources, so /docs works behind plain HTTP", async () => {
+    const docs = await request(app).get("/docs/").expect(200);
+    expect(docs.headers["content-security-policy"]).toBeDefined();
+    expect(docs.headers["content-security-policy"]).not.toContain("upgrade-insecure-requests");
+  });
 });
 
 describe("authentication", () => {

@@ -26,7 +26,7 @@ cp .env.example .env     # first time only; fill PORTAL_EMAIL, PORTAL_PASSWORD, 
 | Check | Expected |
 |---|---|
 | `npm run typecheck` | no output, exit code 0 |
-| `npm test` | `Test Files 23 passed`, `Tests 210 passed`, no network calls |
+| `npm test` | `Test Files 23 passed`, `Tests 211 passed`, no network calls |
 | `npm run build` | creates `dist/`, no errors |
 
 The tests run against an in-process fake portal (`test/helpers/fakePortal.ts`)

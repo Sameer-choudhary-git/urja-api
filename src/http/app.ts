@@ -64,7 +64,16 @@ export function createApp(options: AppOptions): BuiltApp {
   app.use(accessLog(logger));
   app.use(cors(options.corsOrigins ?? []));
   // Cross-origin resource policy must allow other origins to read responses when CORS is on.
-  app.use(helmet({ crossOriginResourcePolicy: { policy: (options.corsOrigins ?? []).length > 0 ? "cross-origin" : "same-origin" } }));
+  app.use(
+    helmet({
+      // helmet's default CSP has `upgrade-insecure-requests`, which makes the
+      // browser fetch Swagger UI's CSS/JS over https://. Behind plain HTTP
+      // (EC2 on port 80, no certificate) that times out and /docs renders blank.
+      // TLS is the gateway's job, so the app does not force the upgrade.
+      contentSecurityPolicy: { directives: { upgradeInsecureRequests: null } },
+      crossOriginResourcePolicy: { policy: (options.corsOrigins ?? []).length > 0 ? "cross-origin" : "same-origin" },
+    }),
+  );
   app.use(compression());
 
   const registry = new RouteRegistry();

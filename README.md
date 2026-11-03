@@ -48,7 +48,7 @@ search, anomaly detection and transformer loading.
 | Robustness | Circuit breaker and concurrency limit around the portal, chaos tests, graceful shutdown, `/health` and `/ready` |
 | HTTP | Express 5, 17 routes under `/v1`, one route declaration drives validation, types and OpenAPI; API keys; rate limit; RFC 9457 errors; ETags; CORS |
 | Ops | Multi-stage Docker image (non-root, read-only filesystem), Compose with an nginx gateway, GitHub Actions CI, EC2 deploy guide |
-| Tests | 210 tests (vitest + supertest) against an in-process fake portal built from PROTOCOL.md; no network needed |
+| Tests | 211 tests (vitest + supertest) against an in-process fake portal built from PROTOCOL.md; no network needed |
 
 ## Quick start
 
