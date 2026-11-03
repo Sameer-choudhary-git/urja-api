@@ -68,11 +68,14 @@ myself.
 
 ## If you were reviewing your own submission, what would you criticise?
 
-It is on the edge of over-engineered for 403 meters. A circuit breaker, a
-concurrency limiter, a grid index, a fallback data path and a cache with a
-data-age TTL are each justified in the README, but a reviewer could fairly say
-a simpler version would have served the brief, and that the extra code is
-more to maintain. The fake portal is my own reading of the protocol, so the
+Some of it could look heavy for 403 meters. I designed the API for several
+consumers at once (field operations, data analysts, planning, revenue
+protection), which is why responses carry facets, full network paths,
+data-quality issues and derived reading values; the README maps each of those
+to the team that needs it. I kept the infrastructure small on purpose (one
+process, no database, no Redis). Even so, the circuit breaker, concurrency
+limiter, grid index and fallback data path are each more code to maintain, and
+a reviewer could fairly ask whether all of them were needed on day one. The fake portal is my own reading of the protocol, so the
 tests prove internal consistency, not that the real portal behaves that way;
 only the probe and cross-check scripts touch the real thing, and they are run
 by hand. Transformer loading is a lower bound with a synthetic-looking

@@ -1,4 +1,4 @@
-import type { MeterQuery } from "../catalog/catalogSnapshot.js";
+import type { CatalogSnapshot, MeterQuery } from "../catalog/catalogSnapshot.js";
 import { NETWORK_LEVELS, type Meter, type NetworkLevel } from "../domain/meter.js";
 import { AnomalyService, MAX_SCOPE_METERS } from "../anomalies/anomalyService.js";
 import type { Anomaly } from "../domain/anomalies.js";
@@ -6,7 +6,9 @@ import { aggregate, inWindow, intervalStart, summarize, type TimeWindow } from "
 import { HALF_HOUR_MS, toIstIso } from "../domain/time.js";
 import { buildNetworkTree, type NetworkNode } from "../domain/networkTree.js";
 import { ApiError } from "../http/problem.js";
-import type { RouteRegistry } from "../http/routeRegistry.js";
+import { RawBody, type RouteRegistry } from "../http/routeRegistry.js";
+import { mapPool } from "../shared/mapPool.js";
+import { toCsv } from "./csv.js";
 import { readCatalog, type ApiContext } from "./context.js";
 import * as s from "./schemas.js";
 
@@ -304,30 +306,7 @@ export function registerRoutes(registry: RouteRegistry, context: ApiContext): vo
     errors: [502, 503],
     handler: async ({ query, res }) => {
       const { snapshot, meta } = await readCatalog(context, res);
-      const scopes = [query.transformer, query.node, query.meterIds].filter((v) => v !== undefined);
-      if (scopes.length !== 1) throw ApiError.badRequest("Give exactly one of transformer, node or meterIds");
-
-      let meters: Meter[];
-      let scope: string;
-      if (query.meterIds !== undefined) {
-        const unknown = query.meterIds.filter((id) => snapshot.getMeter(id) === undefined);
-        if (unknown.length > 0) throw ApiError.badRequest(`Unknown meter IDs: ${unknown.join(", ")}`);
-        meters = [...new Set(query.meterIds.map((id) => snapshot.getMeter(id)!))];
-        scope = `meters ${meters.map((m) => m.id).join(",")}`;
-      } else if (query.transformer !== undefined) {
-        const code = query.transformer.toUpperCase();
-        meters = [...snapshot.query({ network: { transformer: code }, limit: 500 }).items];
-        scope = `transformer ${code}`;
-      } else {
-        meters = [...snapshot.query({ node: query.node!, limit: 500 }).items];
-        scope = `node ${query.node}`;
-      }
-      if (meters.length === 0) throw ApiError.notFound(`No meters in ${scope}`);
-      if (meters.length > MAX_SCOPE_METERS) {
-        throw ApiError.badRequest(
-          `${scope} has ${meters.length} meters; a scan covers at most ${MAX_SCOPE_METERS}. Pick a smaller node or a transformer.`,
-        );
-      }
+      const { meters, scope } = resolveScope(snapshot, query);
 
       const { results, failed } = await anomalies.scan(meters, query);
       const minRank = query.severity === undefined ? 0 : SEVERITY_RANK[query.severity];
@@ -619,6 +598,162 @@ export function registerRoutes(registry: RouteRegistry, context: ApiContext): vo
       };
     },
   });
+
+  // -- Bulk export --------------------------------------------------------------
+
+  registry.add({
+    method: "get",
+    path: "/v1/export/meters",
+    operationId: "exportMeters",
+    summary: "Bulk export of meters as flat rows (JSON or CSV), no paging",
+    description:
+      "Every meter that matches the same filters as GET /v1/meters, in one response, flattened to one row per meter " +
+      "with the full network position, transformer rating and data-issue codes. Meant for analysts, spreadsheets and " +
+      "BI tools. `format=csv` returns a CSV file download (Content-Disposition: attachment). Served from the in-memory " +
+      "catalog, so it costs no portal calls.",
+    tags: ["Bulk export"],
+    auth: true,
+    query: s.meterExportQuery,
+    response: s.meterExportResponse,
+    alsoProduces: ["text/csv"],
+    errors: [503],
+    handler: async ({ query, res }) => {
+      const { snapshot, meta } = await readCatalog(context, res);
+      const meters = snapshot.query({ ...toMeterQuery(query), limit: Number.MAX_SAFE_INTEGER }).items;
+      const rows = meters.map((meter) => meterRow(meter, snapshot));
+      if (query.format === "csv") {
+        return new RawBody("text/csv; charset=utf-8", toCsv(METER_COLUMNS, rows), "urja-meters.csv");
+      }
+      return { data: { count: rows.length, rows }, meta };
+    },
+  });
+
+  registry.add({
+    method: "get",
+    path: "/v1/export/readings",
+    operationId: "exportReadings",
+    summary: "Bulk export of readings for many meters (JSON or CSV)",
+    description:
+      `Readings for a transformer, a network node or a list of meters (at most ${MAX_SCOPE_METERS} meters), in long format: ` +
+      "one row per meter per half hour, hour or day. Same window rules as GET /v1/meters/{meterId}/readings " +
+      "(at most 31 days; without from/to, the 7 days ending at the newest reading). One portal call per meter, " +
+      "at most 4 at a time, cached afterwards. Meters that fail are listed under `failed` (JSON) and left out of the rows. " +
+      "`format=csv` returns a CSV file download.",
+    tags: ["Bulk export"],
+    auth: true,
+    query: s.readingsExportQuery,
+    response: s.readingsExportResponse,
+    alsoProduces: ["text/csv"],
+    errors: [404, 502, 503],
+    handler: async ({ query, res }) => {
+      const { snapshot, meta } = await readCatalog(context, res);
+      const { meters, scope } = resolveScope(snapshot, query);
+
+      const settled = await mapPool(meters, 4, async (meter) => {
+        try {
+          const result = await context.readings.get({ meterId: meter.id, from: query.from, to: query.to });
+          return { ok: true as const, meter, result };
+        } catch (error) {
+          return { ok: false as const, meter, error };
+        }
+      });
+      const ok = settled.filter((outcome) => outcome.ok);
+      const failed = settled
+        .filter((outcome) => !outcome.ok)
+        .map(({ meter, error }) => ({ meterId: meter.id, error: error instanceof Error ? error.message : String(error) }));
+      // Nothing worked at all: an outage, not a partial export. Surface the real error (502/503).
+      const first = settled[0];
+      if (ok.length === 0 && first !== undefined && !first.ok) throw first.error;
+
+      const rows: s.ReadingsExportRow[] = ok.flatMap(({ meter, result }): s.ReadingsExportRow[] =>
+        query.granularity === "raw"
+          ? inWindow(result.readings, result.window).map((r) => ({
+              meterId: meter.id,
+              start: toIstIso(intervalStart(r)),
+              end: toIstIso(r.at),
+              kwh: r.intervalKwh,
+              kvah: r.intervalKvah,
+              powerFactor: r.powerFactor,
+              voltageMin: r.voltageR,
+              voltageAvg: r.voltageR,
+              voltageMax: r.voltageR,
+              intervals: r.intervalKwh === null ? 0 : 1,
+              expectedIntervals: 1,
+              kwhRegister: r.kwhRegister,
+              kvahRegister: r.kvahRegister,
+            }))
+          : aggregate(result.readings, result.window, query.granularity).map((b) => ({
+              meterId: meter.id,
+              start: toIstIso(b.start),
+              end: toIstIso(b.end),
+              kwh: b.kwh,
+              kvah: b.kvah,
+              powerFactor: b.powerFactor,
+              voltageMin: b.voltageR?.min ?? null,
+              voltageAvg: b.voltageR?.avg ?? null,
+              voltageMax: b.voltageR?.max ?? null,
+              intervals: b.intervals,
+              expectedIntervals: b.expectedIntervals,
+              kwhRegister: null,
+              kvahRegister: null,
+            })),
+      );
+
+      if (query.format === "csv") {
+        const name = `urja-readings-${scope.split(" ")[0]}-${query.granularity}.csv`;
+        return new RawBody("text/csv; charset=utf-8", toCsv(READING_COLUMNS, rows), name);
+      }
+      return {
+        data: {
+          scope,
+          granularity: query.granularity,
+          timezone: "+05:30" as const,
+          window: isoWindow(ok[0]!.result.window),
+          meters: ok.length,
+          failed,
+          count: rows.length,
+          rows,
+        },
+        meta,
+      };
+    },
+  });
+}
+
+const METER_COLUMNS = [
+  "id", "serialNumber", "make", "phase", "status", "installationType", "build", "lat", "lng",
+  ...NETWORK_LEVELS.flatMap((level) => [`${level}Code`, `${level}Name`] as const),
+  "transformerCapacityKva", "networkPath", "issueCodes",
+] as const satisfies readonly (keyof s.MeterExportRow)[];
+
+const READING_COLUMNS = [
+  "meterId", "start", "end", "kwh", "kvah", "powerFactor", "voltageMin", "voltageAvg", "voltageMax",
+  "intervals", "expectedIntervals", "kwhRegister", "kvahRegister",
+] as const satisfies readonly (keyof s.ReadingsExportRow)[];
+
+/** One meter as a flat export row: every network level as code + name columns. */
+function meterRow(meter: Meter, snapshot: CatalogSnapshot): s.MeterExportRow {
+  const network = Object.fromEntries(
+    NETWORK_LEVELS.flatMap((level) => [
+      [`${level}Code`, meter.network[level].code],
+      [`${level}Name`, meter.network[level].name],
+    ]),
+  ) as Pick<s.MeterExportRow, `${NetworkLevel}Code` | `${NetworkLevel}Name`>;
+  return {
+    id: meter.id,
+    serialNumber: meter.serialNumber,
+    make: meter.make,
+    phase: meter.phase,
+    status: meter.status,
+    installationType: meter.installationType,
+    build: meter.build,
+    lat: meter.location.lat,
+    lng: meter.location.lng,
+    ...network,
+    transformerCapacityKva: snapshot.getTransformer(meter.network.transformer.code)?.capacityKva ?? null,
+    networkPath: meter.network.path,
+    issueCodes: [...new Set(meter.issues.map((issue) => issue.code))].join(" "),
+  };
 }
 
 type MeterFilterInput = {
@@ -631,6 +766,38 @@ type MeterFilterInput = {
   node?: string | undefined;
   hasIssues?: boolean | undefined;
 } & Partial<Record<NetworkLevel, string | undefined>>;
+
+/** Exactly one of transformer, node or meterIds -> the meters in it (at most MAX_SCOPE_METERS). */
+function resolveScope(
+  snapshot: CatalogSnapshot,
+  query: { transformer?: string | undefined; node?: string | undefined; meterIds?: string[] | undefined },
+): { meters: Meter[]; scope: string } {
+  const scopes = [query.transformer, query.node, query.meterIds].filter((v) => v !== undefined);
+  if (scopes.length !== 1) throw ApiError.badRequest("Give exactly one of transformer, node or meterIds");
+
+  let meters: Meter[];
+  let scope: string;
+  if (query.meterIds !== undefined) {
+    const unknown = query.meterIds.filter((id) => snapshot.getMeter(id) === undefined);
+    if (unknown.length > 0) throw ApiError.badRequest(`Unknown meter IDs: ${unknown.join(", ")}`);
+    meters = [...new Set(query.meterIds.map((id) => snapshot.getMeter(id)!))];
+    scope = `meters ${meters.map((m) => m.id).join(",")}`;
+  } else if (query.transformer !== undefined) {
+    const code = query.transformer.toUpperCase();
+    meters = [...snapshot.query({ network: { transformer: code }, limit: 500 }).items];
+    scope = `transformer ${code}`;
+  } else {
+    meters = [...snapshot.query({ node: query.node!, limit: 500 }).items];
+    scope = `node ${query.node}`;
+  }
+  if (meters.length === 0) throw ApiError.notFound(`No meters in ${scope}`);
+  if (meters.length > MAX_SCOPE_METERS) {
+    throw ApiError.badRequest(
+      `${scope} has ${meters.length} meters; at most ${MAX_SCOPE_METERS} per request. Pick a smaller node or a transformer.`,
+    );
+  }
+  return { meters, scope };
+}
 
 function toMeterQuery(query: MeterFilterInput): MeterQuery {
   const network: Partial<Record<NetworkLevel, string>> = {};

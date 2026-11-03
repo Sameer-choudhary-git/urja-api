@@ -5259,6 +5259,787 @@
           }
         }
       }
+    },
+    "/v1/export/meters": {
+      "get": {
+        "operationId": "exportMeters",
+        "summary": "Bulk export of meters as flat rows (JSON or CSV), no paging",
+        "description": "Every meter that matches the same filters as GET /v1/meters, in one response, flattened to one row per meter with the full network position, transformer rating and data-issue codes. Meant for analysts, spreadsheets and BI tools. `format=csv` returns a CSV file download (Content-Disposition: attachment). Served from the in-memory catalog, so it costs no portal calls.",
+        "tags": [
+          "Bulk export"
+        ],
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "description": "Substring of meter ID or serial number, case-insensitive.",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "description": "Installation status. Comma-separated; a meter matches ANY of them. Values: installed, faulty, decommissioned.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "phase",
+            "in": "query",
+            "required": false,
+            "description": "Phase type. Comma-separated; a meter matches ANY of them. Values: single, three.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "installationType",
+            "in": "query",
+            "required": false,
+            "description": "Installation type. Comma-separated; a meter matches ANY of them. Values: whole_current, ct_operated.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "make",
+            "in": "query",
+            "required": false,
+            "description": "Manufacturer, e.g. Genus. Comma-separated; matches ANY of them.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "build",
+            "in": "query",
+            "required": false,
+            "description": "Portal `build` value, e.g. legacy or v2. Comma-separated; matches ANY of them.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "zone",
+            "in": "query",
+            "required": false,
+            "description": "Zone code, e.g. Z-01.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "circle",
+            "in": "query",
+            "required": false,
+            "description": "Circle code.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "division",
+            "in": "query",
+            "required": false,
+            "description": "Division code (repeats across circles; prefer `node`).",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "subdivision",
+            "in": "query",
+            "required": false,
+            "description": "Subdivision code.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "substation",
+            "in": "query",
+            "required": false,
+            "description": "Substation code.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "feeder",
+            "in": "query",
+            "required": false,
+            "description": "Feeder code, e.g. F-007.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "transformer",
+            "in": "query",
+            "required": false,
+            "description": "Transformer code, e.g. DT-007.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "node",
+            "in": "query",
+            "required": false,
+            "description": "Network node id; returns that exact subtree, e.g. Z-01.C-01.D-07.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "hasIssues",
+            "in": "query",
+            "required": false,
+            "description": "true: only meters with data-quality issues; false: only clean ones.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "true",
+                "false"
+              ]
+            }
+          },
+          {
+            "name": "format",
+            "in": "query",
+            "required": false,
+            "description": "json = flat rows in `data.rows`; csv = the same rows as a CSV file (one header line).",
+            "schema": {
+              "default": "json",
+              "type": "string",
+              "enum": [
+                "json",
+                "csv"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "count": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        "rows": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "serialNumber": {
+                                "type": "string"
+                              },
+                              "make": {
+                                "type": "string"
+                              },
+                              "phase": {
+                                "type": "string"
+                              },
+                              "status": {
+                                "type": "string"
+                              },
+                              "installationType": {
+                                "type": "string"
+                              },
+                              "build": {
+                                "type": "string"
+                              },
+                              "lat": {
+                                "type": "number"
+                              },
+                              "lng": {
+                                "type": "number"
+                              },
+                              "zoneCode": {
+                                "type": "string"
+                              },
+                              "zoneName": {
+                                "type": "string"
+                              },
+                              "circleCode": {
+                                "type": "string"
+                              },
+                              "circleName": {
+                                "type": "string"
+                              },
+                              "divisionCode": {
+                                "type": "string"
+                              },
+                              "divisionName": {
+                                "type": "string"
+                              },
+                              "subdivisionCode": {
+                                "type": "string"
+                              },
+                              "subdivisionName": {
+                                "type": "string"
+                              },
+                              "substationCode": {
+                                "type": "string"
+                              },
+                              "substationName": {
+                                "type": "string"
+                              },
+                              "feederCode": {
+                                "type": "string"
+                              },
+                              "feederName": {
+                                "type": "string"
+                              },
+                              "transformerCode": {
+                                "type": "string"
+                              },
+                              "transformerName": {
+                                "type": "string"
+                              },
+                              "transformerCapacityKva": {
+                                "type": [
+                                  "number",
+                                  "null"
+                                ]
+                              },
+                              "networkPath": {
+                                "type": "string"
+                              },
+                              "issueCodes": {
+                                "type": "string",
+                                "description": "Space-separated data-issue codes; empty when the record is clean."
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "serialNumber",
+                              "make",
+                              "phase",
+                              "status",
+                              "installationType",
+                              "build",
+                              "lat",
+                              "lng",
+                              "zoneCode",
+                              "zoneName",
+                              "circleCode",
+                              "circleName",
+                              "divisionCode",
+                              "divisionName",
+                              "subdivisionCode",
+                              "subdivisionName",
+                              "substationCode",
+                              "substationName",
+                              "feederCode",
+                              "feederName",
+                              "transformerCode",
+                              "transformerName",
+                              "transformerCapacityKva",
+                              "networkPath",
+                              "issueCodes"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "count",
+                        "rows"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "meta": {
+                      "type": "object",
+                      "properties": {
+                        "asOf": {
+                          "type": "string",
+                          "description": "When this data was fetched from the portal (ISO 8601, UTC)."
+                        },
+                        "ageSeconds": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991,
+                          "description": "Age of the data in seconds."
+                        },
+                        "stale": {
+                          "type": "boolean",
+                          "description": "True when older than the refresh interval; a refresh is under way."
+                        },
+                        "source": {
+                          "type": "string",
+                          "enum": [
+                            "export",
+                            "fallback"
+                          ],
+                          "description": "export = the portal's signed bulk export; fallback = rebuilt from search and detail pages because the export failed."
+                        }
+                      },
+                      "required": [
+                        "asOf",
+                        "ageSeconds",
+                        "stale",
+                        "source"
+                      ],
+                      "additionalProperties": false,
+                      "description": "Freshness of the catalog the answer came from."
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "meta"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "text/csv": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid parameters",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid API key",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The legacy portal is unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/export/readings": {
+      "get": {
+        "operationId": "exportReadings",
+        "summary": "Bulk export of readings for many meters (JSON or CSV)",
+        "description": "Readings for a transformer, a network node or a list of meters (at most 50 meters), in long format: one row per meter per half hour, hour or day. Same window rules as GET /v1/meters/{meterId}/readings (at most 31 days; without from/to, the 7 days ending at the newest reading). One portal call per meter, at most 4 at a time, cached afterwards. Meters that fail are listed under `failed` (JSON) and left out of the rows. `format=csv` returns a CSV file download.",
+        "tags": [
+          "Bulk export"
+        ],
+        "parameters": [
+          {
+            "name": "from",
+            "in": "query",
+            "required": false,
+            "description": "Start of the window, inclusive. A date means 00:00 IST that day; a date-time without an offset is read as IST.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": false,
+            "description": "End of the window, exclusive. A date-only value includes that whole day (to=2026-06-30 ends at 1 July 00:00 IST).",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "transformer",
+            "in": "query",
+            "required": false,
+            "description": "All meters on this transformer, e.g. DT-007.",
+            "schema": {
+              "type": "string",
+              "pattern": "^[Dd][Tt]-\\d{3}$"
+            }
+          },
+          {
+            "name": "node",
+            "in": "query",
+            "required": false,
+            "description": "All meters under this network node id, e.g. Z-01.C-01.D-07.SD-07.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "meterIds",
+            "in": "query",
+            "required": false,
+            "description": "Explicit meter IDs, e.g. J100000,J100005. Comma-separated; matches ANY of them.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "granularity",
+            "in": "query",
+            "required": false,
+            "description": "raw = half-hourly rows; hour/day = summed per IST hour or day.",
+            "schema": {
+              "default": "hour",
+              "type": "string",
+              "enum": [
+                "raw",
+                "hour",
+                "day"
+              ]
+            }
+          },
+          {
+            "name": "format",
+            "in": "query",
+            "required": false,
+            "description": "json = flat rows in `data.rows`; csv = the same rows as a CSV file (one header line).",
+            "schema": {
+              "default": "json",
+              "type": "string",
+              "enum": [
+                "json",
+                "csv"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "scope": {
+                          "type": "string"
+                        },
+                        "granularity": {
+                          "type": "string",
+                          "enum": [
+                            "raw",
+                            "hour",
+                            "day"
+                          ]
+                        },
+                        "timezone": {
+                          "type": "string",
+                          "const": "+05:30"
+                        },
+                        "window": {
+                          "type": "object",
+                          "properties": {
+                            "from": {
+                              "type": "string",
+                              "description": "ISO 8601 with the IST offset, e.g. 2026-06-29T00:30:00+05:30."
+                            },
+                            "to": {
+                              "type": "string",
+                              "description": "ISO 8601 with the IST offset, e.g. 2026-06-29T00:30:00+05:30."
+                            }
+                          },
+                          "required": [
+                            "from",
+                            "to"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "meters": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991,
+                          "description": "Meters with readings in the export."
+                        },
+                        "failed": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "meterId": {
+                                "type": "string"
+                              },
+                              "error": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "meterId",
+                              "error"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "description": "Meters whose readings could not be fetched."
+                        },
+                        "count": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        "rows": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "meterId": {
+                                "type": "string"
+                              },
+                              "start": {
+                                "type": "string",
+                                "description": "Start of the half hour, hour or day."
+                              },
+                              "end": {
+                                "type": "string",
+                                "description": "ISO 8601 with the IST offset, e.g. 2026-06-29T00:30:00+05:30."
+                              },
+                              "kwh": {
+                                "type": [
+                                  "number",
+                                  "null"
+                                ]
+                              },
+                              "kvah": {
+                                "type": [
+                                  "number",
+                                  "null"
+                                ]
+                              },
+                              "powerFactor": {
+                                "type": [
+                                  "number",
+                                  "null"
+                                ]
+                              },
+                              "voltageMin": {
+                                "type": [
+                                  "number",
+                                  "null"
+                                ]
+                              },
+                              "voltageAvg": {
+                                "type": [
+                                  "number",
+                                  "null"
+                                ]
+                              },
+                              "voltageMax": {
+                                "type": [
+                                  "number",
+                                  "null"
+                                ]
+                              },
+                              "intervals": {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991,
+                                "description": "Half hours with known usage."
+                              },
+                              "expectedIntervals": {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              "kwhRegister": {
+                                "description": "Cumulative register at the end of the half hour (raw only).",
+                                "type": [
+                                  "number",
+                                  "null"
+                                ]
+                              },
+                              "kvahRegister": {
+                                "type": [
+                                  "number",
+                                  "null"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "meterId",
+                              "start",
+                              "end",
+                              "kwh",
+                              "kvah",
+                              "powerFactor",
+                              "voltageMin",
+                              "voltageAvg",
+                              "voltageMax",
+                              "intervals",
+                              "expectedIntervals",
+                              "kwhRegister",
+                              "kvahRegister"
+                            ],
+                            "additionalProperties": false,
+                            "description": "One row per meter per bucket (long format), the shape spreadsheets and BI tools expect."
+                          }
+                        }
+                      },
+                      "required": [
+                        "scope",
+                        "granularity",
+                        "timezone",
+                        "window",
+                        "meters",
+                        "failed",
+                        "count",
+                        "rows"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "meta": {
+                      "type": "object",
+                      "properties": {
+                        "asOf": {
+                          "type": "string",
+                          "description": "When this data was fetched from the portal (ISO 8601, UTC)."
+                        },
+                        "ageSeconds": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991,
+                          "description": "Age of the data in seconds."
+                        },
+                        "stale": {
+                          "type": "boolean",
+                          "description": "True when older than the refresh interval; a refresh is under way."
+                        },
+                        "source": {
+                          "type": "string",
+                          "enum": [
+                            "export",
+                            "fallback"
+                          ],
+                          "description": "export = the portal's signed bulk export; fallback = rebuilt from search and detail pages because the export failed."
+                        }
+                      },
+                      "required": [
+                        "asOf",
+                        "ageSeconds",
+                        "stale",
+                        "source"
+                      ],
+                      "additionalProperties": false,
+                      "description": "Freshness of the catalog the answer came from."
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "meta"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "text/csv": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid parameters",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid API key",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The legacy portal failed or answered unexpectedly",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The legacy portal is unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {

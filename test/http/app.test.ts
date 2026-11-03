@@ -288,6 +288,8 @@ describe("OpenAPI document", () => {
       "/health",
       "/ready",
       "/v1/anomalies",
+      "/v1/export/meters",
+      "/v1/export/readings",
       "/v1/hierarchy",
       "/v1/hierarchy/{nodeId}",
       "/v1/meters",
@@ -484,5 +486,62 @@ describe("CORS", () => {
   it("is off by default", async () => {
     const res = await get("/v1/meters?limit=1").set("origin", "http://localhost:5173").expect(200);
     expect(res.headers["access-control-allow-origin"]).toBeUndefined();
+  });
+});
+
+describe("bulk export", () => {
+  it("GET /v1/export/meters returns every match as flat rows, without paging", async () => {
+    const all = await get("/v1/meters?status=faulty&limit=500").expect(200);
+    const res = await get("/v1/export/meters?status=faulty").expect(200);
+    const body = expectShape(s.meterExportResponse, res.body);
+    expect(body.data.count).toBe(all.body.page.total);
+    expect(body.data.rows).toHaveLength(body.data.count);
+    const row = body.data.rows[0]!;
+    expect(row.status).toBe("faulty");
+    expect(row.transformerCode).toMatch(/^DT-\d{3}$/);
+    expect(row.networkPath).toContain(row.zoneCode);
+  });
+
+  it("format=csv sends a CSV download with one line per meter", async () => {
+    const res = await get("/v1/export/meters?transformer=DT-007&format=csv").expect(200);
+    expect(res.headers["content-type"]).toMatch(/^text\/csv/);
+    expect(res.headers["content-disposition"]).toMatch(/^attachment; filename="?urja-meters\.csv"?$/);
+    const lines = res.text.trimEnd().split("\r\n");
+    expect(lines[0]).toMatch(/^id,serialNumber,make,phase,status,/);
+    expect(lines[0]).toContain("transformerCapacityKva");
+    expect(lines).toHaveLength(1 + 5); // header + DT-007's 5 meters
+  });
+
+  it("GET /v1/export/readings returns long-format rows for every meter in scope", async () => {
+    const res = await get("/v1/export/readings?transformer=DT-007&from=2026-06-20&to=2026-06-20&granularity=hour").expect(200);
+    const body = expectShape(s.readingsExportResponse, res.body);
+    expect(body.data.meters).toBe(5);
+    expect(body.data.failed).toEqual([]);
+    expect(body.data.count).toBe(5 * 24);
+    expect(new Set(body.data.rows.map((r) => r.meterId)).size).toBe(5);
+    expect(body.data.rows[0]).toMatchObject({ start: "2026-06-20T00:00:00+05:30", end: "2026-06-20T01:00:00+05:30", expectedIntervals: 2 });
+  });
+
+  it("raw granularity keeps the registers; CSV has the same rows", async () => {
+    const json = await get("/v1/export/readings?meterIds=J100000&from=2026-06-20&to=2026-06-20&granularity=raw").expect(200);
+    expect(json.body.data.count).toBe(48);
+    expect(json.body.data.rows[0].kwhRegister).toEqual(expect.any(Number));
+    const csv = await get("/v1/export/readings?meterIds=J100000&from=2026-06-20&to=2026-06-20&granularity=raw&format=csv").expect(200);
+    expect(csv.headers["content-disposition"]).toMatch(/urja-readings-meters-raw\.csv/);
+    expect(csv.text.trimEnd().split("\r\n")).toHaveLength(1 + 48);
+  });
+
+  it("uses the same scope rules as the anomaly scan", async () => {
+    await get("/v1/export/readings").expect(400);
+    await get("/v1/export/readings?transformer=DT-007&node=Z-01").expect(400);
+    await get("/v1/export/readings?meterIds=J999999").expect(400);
+    await get("/v1/export/readings?transformer=DT-999").expect(404);
+  });
+
+  it("is listed in the OpenAPI document with a CSV alternative", () => {
+    const op = (openApi as { paths: Record<string, { get: { tags: string[]; responses: Record<string, { content: object }> } }> })
+      .paths["/v1/export/meters"]!.get;
+    expect(op.tags).toEqual(["Bulk export"]);
+    expect(Object.keys(op.responses["200"]!.content)).toEqual(["application/json", "text/csv"]);
   });
 });

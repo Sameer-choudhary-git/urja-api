@@ -26,7 +26,7 @@ cp .env.example .env     # first time only; fill PORTAL_EMAIL, PORTAL_PASSWORD, 
 | Check | Expected |
 |---|---|
 | `npm run typecheck` | no output, exit code 0 |
-| `npm test` | `Test Files 23 passed`, `Tests 211 passed`, no network calls |
+| `npm test` | `Test Files 23 passed`, `Tests 217 passed`, no network calls |
 | `npm run build` | creates `dist/`, no errors |
 
 The tests run against an in-process fake portal (`test/helpers/fakePortal.ts`)
@@ -182,6 +182,22 @@ Modules: `domain/time.ts`, `domain/readings.ts`, `readings/readingsService.ts`,
 
 Rule thresholds are in `domain/anomalies.ts` (`THRESHOLDS`). Modules:
 `geo/spatialGrid.ts`, `domain/anomalies.ts`, `anomalies/anomalyService.ts`.
+
+### Bulk export
+
+| Request | Expected |
+|---|---|
+| `/v1/export/meters?status=faulty` | `data.count` equals `page.total` of `/v1/meters?status=faulty`; every row flat (`zoneCode`, `zoneName`, ... `transformerCapacityKva`, `issueCodes`) |
+| `/v1/export/meters?transformer=DT-007&format=csv` | `Content-Type: text/csv`, `Content-Disposition: attachment; filename=urja-meters.csv`, header line + 13 rows; opens in Excel |
+| `/v1/export/readings?transformer=DT-007&from=2026-06-29&to=2026-06-29&granularity=hour` | `meters: 13`, `count: 13 x 24 = 312`, `failed: []` |
+| `/v1/export/readings?meterIds=J100000&from=2026-06-29&to=2026-06-29&granularity=raw&format=csv` | header + 48 rows, with `kwhRegister` and `kvahRegister` |
+| `/v1/export/readings` (no scope) | 400, same scope rules as `/v1/anomalies` |
+
+In Swagger the routes are under the **Bulk export** tag; for `format=csv`
+Swagger shows a "Download file" link. With curl add `-OJ` to save the file
+under the server's name. Modules: `api/routes.ts` (`exportMeters`,
+`exportReadings`, `meterRow`), `api/csv.ts` (RFC 4180 writer, CSV-injection
+guard), `http/routeRegistry.ts` (`RawBody`, `alsoProduces`).
 
 ---
 

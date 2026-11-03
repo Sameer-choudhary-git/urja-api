@@ -35,12 +35,26 @@ export interface RouteSpec<
   readonly response: R;
   /** Error statuses worth documenting besides the generic ones. */
   readonly errors?: readonly number[];
+  /**
+   * Extra media types the route can answer with besides JSON (e.g. text/csv for
+   * bulk exports). The handler returns a RawBody for those.
+   */
+  readonly alsoProduces?: readonly string[];
   readonly handler: (input: {
     params: z.output<P>;
     query: z.output<Q>;
     req: Request;
     res: Response;
-  }) => Promise<DeepReadonly<z.input<R>>> | DeepReadonly<z.input<R>>;
+  }) => Promise<DeepReadonly<z.input<R>> | RawBody> | DeepReadonly<z.input<R>> | RawBody;
+}
+
+/** A non-JSON answer (CSV, NDJSON): sent as-is with its media type. */
+export class RawBody {
+  constructor(
+    readonly contentType: string,
+    readonly body: string,
+    readonly filename?: string,
+  ) {}
 }
 
 // The registry stores routes of many shapes; a type-erased spec keeps that simple.
@@ -73,6 +87,11 @@ function toExpressHandler(spec: AnySpec): RequestHandler {
     const params = validate(spec.params, req.params, "path");
     const query = validate(spec.query, req.query, "query");
     const body = await spec.handler({ params, query, req, res });
+    if (body instanceof RawBody) {
+      if (body.filename !== undefined) res.attachment(body.filename);
+      res.type(body.contentType).send(body.body);
+      return;
+    }
     res.json(body);
     // Express 5 forwards a rejected promise to the error middleware by itself.
   };
@@ -129,7 +148,10 @@ export function buildOpenApiDocument(
     const responses: Record<string, unknown> = {
       200: {
         description: "OK",
-        content: { "application/json": { schema: toSchema(spec.response, "output") } },
+        content: {
+          "application/json": { schema: toSchema(spec.response, "output") },
+          ...Object.fromEntries((spec.alsoProduces ?? []).map((type) => [type, { schema: { type: "string" } }])),
+        },
       },
     };
     for (const status of [...errorStatuses].sort()) {

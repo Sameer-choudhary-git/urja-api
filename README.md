@@ -24,6 +24,7 @@ search, anomaly detection and transformer loading.
 ## Contents
 
 - [What was built](#what-was-built)
+- [Who it is for](#who-it-is-for-and-why-the-responses-are-rich)
 - [Quick start](#quick-start)
 - [Sample request and response](#sample-request-and-response)
 - [API overview](#api-overview)
@@ -46,9 +47,35 @@ search, anomaly detection and transformer loading.
 | Readings | Interval kWh from cumulative registers, power factor, hour/day rollups in IST, window rules, cache with a TTL that follows data age |
 | Extras | Nearby search with a grid index, rule-based anomaly detection, transformer loading against kVA rating |
 | Robustness | Circuit breaker and concurrency limit around the portal, chaos tests, graceful shutdown, `/health` and `/ready` |
-| HTTP | Express 5, 17 routes under `/v1`, one route declaration drives validation, types and OpenAPI; API keys; rate limit; RFC 9457 errors; ETags; CORS |
+| HTTP | Express 5, 19 routes (17 under `/v1`, plus `/health` and `/ready`), one route declaration drives validation, types and OpenAPI; API keys; rate limit; RFC 9457 errors; ETags; CORS |
 | Ops | Multi-stage Docker image (non-root, read-only filesystem), Compose with an nginx gateway, GitHub Actions CI, EC2 deploy guide |
-| Tests | 211 tests (vitest + supertest) against an in-process fake portal built from PROTOCOL.md; no network needed |
+| Tests | 217 tests (vitest + supertest) against an in-process fake portal built from PROTOCOL.md; no network needed |
+
+## Who it is for, and why the responses are rich
+
+The portal is one screen for one kind of user. A clean API in front of it is
+used by several teams at once, each wanting something different from the same
+data. The response shapes were designed with those consumers in mind:
+
+| Consumer | What they need | What the API gives them |
+|---|---|---|
+| Field operations | Find a meter, see where it sits, what is wrong nearby | `/v1/search`, full `network` path on every meter, `/v1/meters/nearby`, `/v1/meters.geojson` for maps |
+| Data analysts / BI | Slice the fleet without exporting it by hand | `/v1/export/meters` and `/v1/export/readings` (flat rows, JSON or CSV, no paging), filters on every field, `facets` counts on every list, `/v1/stats?groupBy=`, half-hourly or hourly/daily readings with interval kWh and power factor already derived |
+| Planning / network engineering | Is a transformer close to its rating? | `/v1/transformers/{code}/load` against `capacityKva`, hierarchy with meter and status counts per node |
+| Revenue protection / loss teams | Meters that should not be consuming, odd readings | `/v1/anomalies` (decommissioned-but-consuming, spikes, zero use, low power factor) |
+| Data owners / auditors | Can this data be trusted, and how old is it? | `issues` on each meter, `/v1/quality`, `meta.asOf` / `stale` / `source` on every answer |
+| Other services | A stable contract | OpenAPI 3.1 generated from the code, RFC 9457 errors with stable codes, ETags |
+
+So fields like `facets`, `network.path`, `issues`, `meta.source` and the
+derived reading values are there because a downstream consumer needs them,
+not for their own sake. Everything is computed from data the portal already
+has; nothing is invented.
+
+What was deliberately kept simple, to stay proportionate to 403 meters and
+one portal: no database, no Redis, no message queue, no user accounts, and
+anomaly rules instead of a model (see [Intentionally skipped](#intentionally-skipped)).
+The service is one process with in-memory state, and the README says where
+that stops being enough.
 
 ## Quick start
 
@@ -170,6 +197,8 @@ use June dates.
 | `GET /v1/meters/nearby?lat=&lng=&radiusM=` | Meters near a point, nearest first (optional status/phase/installationType filters) |
 | `GET /v1/meters/{meterId}/anomalies` | Rule-based anomalies in one meter's readings |
 | `GET /v1/anomalies?transformer=` / `node=` / `meterIds=` | Anomaly scan over up to 50 meters, most severe first |
+| `GET /v1/export/meters` | Bulk export: every meter matching the `/v1/meters` filters as flat rows (network codes and names, transformer kVA, issue codes); `format=json` or `csv` (file download) |
+| `GET /v1/export/readings` | Bulk export: readings for a transformer, node or meter list (up to 50 meters), one row per meter per half hour/hour/day; `format=json` or `csv` |
 | `GET /v1/transformers`, `/v1/transformers/{code}` | Transformers with capacity, feeder and meter counts |
 | `GET /v1/transformers/{code}/load` | Summed demand of the DT's meters per half hour vs its kVA rating |
 | `GET /v1/hierarchy` | Zone > Circle > ... > Transformer tree with meter and status counts (`depth`, `status`) |
@@ -258,7 +287,7 @@ src/
     app.ts               builds the Express app (no listen; tests use it in process)
   api/                   our product: routes, request/response schemas
     schemas.ts           zod schemas for every query, param and response
-    routes.ts            the 17 routes
+    routes.ts            the 19 routes
     context.ts           what handlers may use (catalog read, clock), freshness headers
   main.ts                composition root: config -> portal -> catalog -> app -> listen
 scripts/                 smoke, fetch-export, scan-export, probe, cross-check, bench-nearby, dev-offline, export-openapi

@@ -13,7 +13,7 @@ flowchart LR
 
   subgraph api["urja-api (one Node process)"]
     http["http/<br/>middleware, route registry,<br/>errors, OpenAPI"]
-    routes["api/<br/>17 routes + schemas"]
+    routes["api/<br/>19 routes + schemas"]
     services["catalog/ readings/ anomalies/<br/>services and caches"]
     domain["domain/ geo/ quality/<br/>pure logic, no I/O"]
     portal["portal/<br/>adapter: session, client,<br/>breaker, limiter, schemas"]

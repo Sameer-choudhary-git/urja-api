@@ -556,3 +556,94 @@ export const problemSchema = z.object({
   requestId: z.string().optional(),
   errors: z.array(z.object({ path: z.string(), message: z.string() })).optional(),
 });
+
+// ---------------------------------------------------------------------------
+// Bulk exports (for analysts and other systems: no paging, flat rows, JSON or CSV)
+
+const exportFormat = z
+  .enum(["json", "csv"])
+  .default("json")
+  .describe("json = flat rows in `data.rows`; csv = the same rows as a CSV file (one header line).");
+
+export const meterExportQuery = z.object({ ...meterFilterShape, format: exportFormat });
+
+export const meterExportRowSchema = z.object({
+  id: z.string(),
+  serialNumber: z.string(),
+  make: z.string(),
+  phase: z.string(),
+  status: z.string(),
+  installationType: z.string(),
+  build: z.string(),
+  lat: z.number(),
+  lng: z.number(),
+  zoneCode: z.string(),
+  zoneName: z.string(),
+  circleCode: z.string(),
+  circleName: z.string(),
+  divisionCode: z.string(),
+  divisionName: z.string(),
+  subdivisionCode: z.string(),
+  subdivisionName: z.string(),
+  substationCode: z.string(),
+  substationName: z.string(),
+  feederCode: z.string(),
+  feederName: z.string(),
+  transformerCode: z.string(),
+  transformerName: z.string(),
+  transformerCapacityKva: z.number().nullable(),
+  networkPath: z.string(),
+  issueCodes: z.string().describe("Space-separated data-issue codes; empty when the record is clean."),
+});
+
+export const meterExportResponse = z.object({
+  data: z.object({ count: z.number().int(), rows: z.array(meterExportRowSchema) }),
+  meta: metaSchema,
+});
+
+export const readingsExportQuery = z
+  .object({
+    ...windowFields,
+    transformer: z.string().regex(/^[Dd][Tt]-\d{3}$/).optional().describe("All meters on this transformer, e.g. DT-007."),
+    node: z.string().optional().describe("All meters under this network node id, e.g. Z-01.C-01.D-07.SD-07."),
+    meterIds: freeCsv("Explicit meter IDs, e.g. J100000,J100005."),
+    granularity: z.enum(["raw", "hour", "day"]).default("hour").describe("raw = half-hourly rows; hour/day = summed per IST hour or day."),
+    format: exportFormat,
+  })
+  .transform(toWindow)
+  .superRefine(checkWindow);
+
+export const readingsExportRowSchema = z
+  .object({
+    meterId: z.string(),
+    start: istTime.describe("Start of the half hour, hour or day."),
+    end: istTime,
+    kwh: z.number().nullable(),
+    kvah: z.number().nullable(),
+    powerFactor: z.number().nullable(),
+    voltageMin: z.number().nullable(),
+    voltageAvg: z.number().nullable(),
+    voltageMax: z.number().nullable(),
+    intervals: z.number().int().describe("Half hours with known usage."),
+    expectedIntervals: z.number().int(),
+    kwhRegister: z.number().nullable().describe("Cumulative register at the end of the half hour (raw only)."),
+    kvahRegister: z.number().nullable(),
+  })
+  .describe("One row per meter per bucket (long format), the shape spreadsheets and BI tools expect.");
+
+export const readingsExportResponse = z.object({
+  data: z.object({
+    scope: z.string(),
+    granularity: z.enum(["raw", "hour", "day"]),
+    timezone: z.literal("+05:30"),
+    window: z.object({ from: istTime, to: istTime }),
+    meters: z.number().int().describe("Meters with readings in the export."),
+    failed: z.array(z.object({ meterId: z.string(), error: z.string() })).describe("Meters whose readings could not be fetched."),
+    count: z.number().int(),
+    rows: z.array(readingsExportRowSchema),
+  }),
+  meta: metaSchema,
+});
+
+export type MeterExportRow = z.infer<typeof meterExportRowSchema>;
+export type ReadingsExportRow = z.infer<typeof readingsExportRowSchema>;
