@@ -1,0 +1,46 @@
+{
+  "name": "urja-api",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Clean REST API in front of the legacy Urja Meter Ops portal",
+  "type": "module",
+  "engines": {
+    "node": ">=20.6"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "smoke": "tsx --env-file=.env scripts/smoke.ts",
+    "fetch-export": "tsx --env-file=.env scripts/fetch-export.ts",
+    "probe": "tsx --env-file=.env scripts/probe.ts",
+    "scan": "tsx scripts/scan-export.ts",
+    "dev": "tsx watch --env-file=.env src/main.ts",
+    "dev:offline": "tsx scripts/dev-offline.ts",
+    "start": "node --env-file-if-exists=.env dist/main.js",
+    "openapi": "tsx scripts/export-openapi.ts",
+    "bench:nearby": "tsx scripts/bench-nearby.ts",
+    "cross-check": "tsx --env-file=.env scripts/cross-check.ts",
+    "dump-page": "tsx --env-file=.env scripts/dump-page.ts"
+  },
+  "dependencies": {
+    "compression": "^1.8.2",
+    "express": "^5.3.0",
+    "express-rate-limit": "^8.7.1",
+    "helmet": "^8.3.0",
+    "swagger-ui-express": "^5.0.1",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/compression": "^1.8.1",
+    "@types/express": "^5.0.6",
+    "@types/node": "^22.20.5",
+    "@types/supertest": "^7.2.1",
+    "@types/swagger-ui-express": "^4.1.8",
+    "supertest": "^7.3.1",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vitest": "^5.1.0"
+  }
+}

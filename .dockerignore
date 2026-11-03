@@ -1,0 +1,14 @@
+# Keep the build context small and secret-free.
+node_modules
+dist
+coverage
+fixtures/local
+.env
+.env.*
+!.env.example
+.git
+*.log
+test
+scripts
+docs
+deploy

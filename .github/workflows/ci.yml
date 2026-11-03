@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Typecheck, test, build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      # Offline: the tests run against an in-process fake portal, no secrets needed.
+      - run: npm test
+      - run: npm run build
+      # The committed openapi.json must match the code.
+      - name: openapi.json is up to date
+        run: |
+          npm run openapi
+          git diff --exit-code openapi.json
+
+  docker:
+    name: Docker image builds and starts
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t urja-api:ci .
+      - name: Container starts and /health answers
+        run: |
+          docker run -d --name api -e AUTH_MODE=disabled -e PORTAL_EMAIL=ci@example.invalid -e PORTAL_PASSWORD=unused \
+            -e PORTAL_BASE_URL=http://127.0.0.1:9 urja-api:ci
+          for i in $(seq 1 20); do
+            if docker exec api wget -qO- http://127.0.0.1:3000/health; then exit 0; fi
+            sleep 1
+          done
+          docker logs api
+          exit 1

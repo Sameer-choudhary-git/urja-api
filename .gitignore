@@ -1,0 +1,12 @@
+node_modules/
+dist/
+coverage/
+
+# Secrets: never commit real credentials, session cookies or signing secrets
+.env
+.env.*
+!.env.example
+
+# Local data captured from the portal
+fixtures/local/
+*.log
