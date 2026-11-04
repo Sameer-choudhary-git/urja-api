@@ -295,7 +295,7 @@ Conventions:
 | `npm run smoke` | yes | Logs in and reads the first page of meters |
 | `npm run fetch-export` | yes | Fetches all meters via the signed export into `fixtures/local/meter-export.json` (git-ignored; a snapshot is committed as `fixtures/meter-export.json`) |
 | `npm run scan -- <file>` | no | Data-quality report for an export file (`--json` for machine output) |
-| `npm run probe` | yes | Read-only checks for the open questions in PROTOCOL.md section 6 |
+| `npm run probe` | yes | Read-only checks of the portal behaviour described in PROTOCOL.md |
 | `npm run cross-check` | yes | Compares the signed export with the fallback path (`--all` for every meter) |
 | `npm run verify` | yes | **Parity check: the API returns everything the portal has.** Every meter, transformer and energy row from the real portal against a running API (`--api http://<host>`, `--all` for every meter's readings, `--meters J100040`). Exit code 1 on any unexplained difference. A full run's output: [`docs/VERIFY_RESULT.md`](docs/VERIFY_RESULT.md) |
 | `npm run dump-page -- <id>` | yes | Prints one meter's decoded `__data.json` page data (for odd pages) |

@@ -345,34 +345,15 @@ Take the nodes whose `type` is `data` and decode their `data` array; `skip` node
 17. **Codes repeat under different parents** below Circle, and 22 meters have a blank hierarchy cell.
 18. **The export's signing secret is handed to any logged-in client** (`/portal/keys`), and the signing runs in the browser. So the signature looks like a freshness and integrity check rather than a real access barrier *(inferred)*.
 19. **Two shapes for the same detail block**: a name/value list for most meters, a JSON-encoded string (`classData`) with different field names for others (3.2).
+20. **Most meters are read once a day, not every half hour**: 40 meters (J100000 to J100039) have half-hourly rows, the other 363 have one row a day at 00:00, in the same shape (3.3).
+21. **Values are not always numbers**: J100089 has one energy row whose `kwh` and `voltR` are not decimal strings (3.3).
+22. **The energy endpoint rate limits** with `429` when called quickly (about 230 calls in 6 seconds); normal use never hits it (3.3).
+
+Not tested on purpose, to stay read-only and polite: how old an `x-timestamp` the export accepts, what a bad signature returns, and how an expired (rather than missing) cookie behaves (most likely the same `401`).
 
 ---
 
-## 6. Not yet determined
-
-Still open:
-
-- How old an `x-timestamp` the server accepts (deliberately not tested), and what a bad signature returns.
-- Behaviour of an **expired** cookie (as opposed to a missing one); likely the same 401.
-- The meaning of `build` (`legacy` 238, `v2` 165). It does not change the energy format.
-- Which of DT-007's two names is right in the real world. `/portal/dts`, the dedicated transformer list, says "Sanganer DT 7".
-- Rate limits. None were hit during normal use.
-- `/meters/__data.json` (the list page's own data) and the detail `__data.json` without `x-sveltekit-invalidated`.
-
-Answered since the first draft (details in the sections named):
-
-- Signing secret: fixed across calls and logins (3.6).
-- Export pagination: `page` is ignored; one call returns all meters (3.6).
-- Energy date filter: `from`/`to` ISO dates, whole days, inclusive (3.3).
-- Energy history: 1 to 30 June 2026, and one request returns the whole month (3.3).
-- Energy shape and window: the same for legacy and v2, single- and three-phase meters sampled (3.3).
-- DT names: only `DT-007` disagrees between the export and `/portal/dts` (3.5, 3.7).
-- Zone/Circle mapping: each DT has exactly one path above it, but codes below Circle repeat under different parents (3.7).
-- Second data path: search + `__data.json` + `/geo` match the export for 39 of 40 sampled meters (3.2).
-
----
-
-## 7. Reproducing the unsigned calls
+## 6. Reproducing the unsigned calls
 
 ```bash
 # Login and keep the cookie
