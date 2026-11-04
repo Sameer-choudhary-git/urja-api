@@ -1,5 +1,3 @@
-# Move to .github/workflows/deploy.yml (next to ci.yml).
-#
 # After CI passes on main, SSH into the EC2 host and run deploy/deploy.sh
 # (git pull + docker compose up --build + wait for /ready). Also runnable by
 # hand from the Actions tab ("Run workflow").
@@ -8,7 +6,7 @@
 #   EC2_HOST     public IP or DNS of the instance, e.g. 15.252.70.41
 #   EC2_USER     ubuntu
 #   EC2_SSH_KEY  the PRIVATE deploy key (whole file, including the BEGIN/END lines)
-# See docs/DEPLOY_AWS.md, "Deploy automatically on push".
+# The server key is locked to deploy/deploy.sh in ~/.ssh/authorized_keys.
 name: Deploy
 
 on:

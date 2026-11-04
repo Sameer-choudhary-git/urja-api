@@ -232,6 +232,6 @@ Design choices:
 | Tests | 231 tests (vitest + supertest) against a fake portal, including chaos tests. No network needed | `test/` |
 | Docker + nginx | Multi-stage image (non-root, read-only filesystem), Compose with an nginx gateway (20 requests/s per IP) | `Dockerfile`, `docker-compose.yml`, `deploy/nginx.conf` |
 | CI/CD | GitHub Actions runs typecheck, tests and build on every push. A green run on `main` deploys to EC2 over SSH, with a key that can only run the deploy script | `.github/workflows/`, `deploy/deploy.sh` |
-| AWS deployment | Live on one EC2 instance, with a step-by-step guide | http://15.252.70.41/docs, [DEPLOY_AWS.md](DEPLOY_AWS.md) |
+| AWS deployment | Live on one EC2 instance with Docker Compose, deployed by CI | http://15.252.70.41/docs, `deploy/` |
 | Probe and smoke scripts | Scripts used to discover and re-check how the portal behaves (`probe`, `smoke`, `cross-check`, `dump-page`) | `scripts/` |
-| Documentation | Architecture with diagrams and one request followed step by step, a module-by-module testing guide, and real responses for every route | [ARCHITECTURE.md](ARCHITECTURE.md), [TESTING_GUIDE.md](TESTING_GUIDE.md), [api-examples.md](api-examples.md) |
+| Documentation | Architecture with one request followed step by step, system design diagrams (HLD, LLD, flows), and real responses for every route | [ARCHITECTURE.md](ARCHITECTURE.md), [SYSTEM_DESIGN.md](SYSTEM_DESIGN.md), [api-examples.md](api-examples.md) |

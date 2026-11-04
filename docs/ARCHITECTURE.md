@@ -207,7 +207,8 @@ flowchart LR
 ```
 
 Only the gateway publishes a port. The API container can only be reached
-inside the Compose network. Details are in [`DEPLOY_AWS.md`](DEPLOY_AWS.md).
+inside the Compose network. The full picture, with CI/CD, is in
+[SYSTEM_DESIGN.md](SYSTEM_DESIGN.md#12-deployment-and-cicd).
 
 ## 8. Patterns used, by name
 

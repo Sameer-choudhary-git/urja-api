@@ -4,7 +4,7 @@
 # current user run docker without sudo. Safe to run more than once.
 #
 #   bash deploy/ec2-setup.sh
-#   # then log out and back in (for the docker group), and see docs/DEPLOY_AWS.md
+#   # then log out and back in (for the docker group), set up .env, and run docker compose up -d --build
 set -euo pipefail
 
 if [[ "$(id -u)" -eq 0 ]]; then

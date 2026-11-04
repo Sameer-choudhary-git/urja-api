@@ -31,9 +31,7 @@ too. [`docs/EXTRAS.md`](docs/EXTRAS.md) lists each one and shows how to try it.
 | [`REFLECTION.md`](REFLECTION.md) | What was hard, what I would change, how I used AI |
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Layers, diagrams, and one request followed step by step |
 | [`docs/SYSTEM_DESIGN.md`](docs/SYSTEM_DESIGN.md) | System design as diagrams: HLD, LLD (modules, classes, domain model) and step-by-step flows |
-| [`docs/TESTING_GUIDE.md`](docs/TESTING_GUIDE.md) | Manual checks, module by module, with expected results |
 | [`docs/VERIFY_RESULT.md`](docs/VERIFY_RESULT.md) | Output of `npm run verify -- --all`: the API checked against the live portal, every meter (PASS) |
-| [`docs/DEPLOY_AWS.md`](docs/DEPLOY_AWS.md) | Running it on one EC2 instance with Docker Compose |
 | [`docs/api-examples.md`](docs/api-examples.md) | Real responses for every route |
 
 ## Contents
@@ -183,7 +181,7 @@ looking around without credentials, but it is not the real data path.
 ### 4. Deployed on AWS
 
 Open http://15.252.70.41/docs and use the reviewer key above. It is the same
-code as option 2, on one EC2 instance ([docs/DEPLOY_AWS.md](docs/DEPLOY_AWS.md)).
+code as option 2, on one EC2 instance.
 
 The web client lives in its own repo. It calls the API through a small
 server-side proxy, so the key never reaches the browser.
@@ -368,7 +366,7 @@ src/
   main.ts                composition root: config -> portal -> catalog -> app -> listen
 scripts/                 smoke, fetch-export, scan-export, probe, cross-check, verify-parity, bench-nearby, dev-offline, export-openapi
 test/                    vitest suites, fake portal, small real-data fixture
-docs/                    architecture, extras, testing guide, verify result, AWS deploy, API examples
+docs/                    architecture, system design diagrams, extras, verify result, API examples
 deploy/                  nginx gateway config, EC2 setup script, deploy.sh
 .github/workflows/       ci.yml (checks on every push), deploy.yml (auto-deploy to EC2)
 Dockerfile, docker-compose.yml
@@ -672,5 +670,7 @@ a read-only filesystem, with a memory limit and a health check.
 GitHub Actions runs `.github/workflows/ci.yml` (typecheck, tests, build and a
 Docker build) on every push. When CI passes on `main`,
 `.github/workflows/deploy.yml` deploys to EC2 over SSH, using a key that can
-only run the deploy script. The step-by-step EC2 guide, including the security
-group and API keys, is in [`docs/DEPLOY_AWS.md`](docs/DEPLOY_AWS.md).
+only run the deploy script (`deploy/deploy.sh`). `deploy/ec2-setup.sh`
+prepares a fresh Ubuntu instance (Docker, Compose, swap). Only port 80 is
+open to the internet; the portal login and API keys live in a `.env` file on
+the server, never in git.
