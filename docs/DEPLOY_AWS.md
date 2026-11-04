@@ -108,8 +108,11 @@ Set at least:
 ```bash
 PORTAL_EMAIL=<portal account from the brief>
 PORTAL_PASSWORD=<portal password>
-API_KEYS=sameer:<first key>,reviewer:<second key>
+API_KEYS=sameer:<first key>,tester:uKmXzDqwVrlosCHMOThjrkJeeILTQop6
 ```
+
+`tester` is the reviewer key published in the README, so a reviewer can use the
+same key locally and here. Remove it from `API_KEYS` after the review.
 
 Leave `TRUST_PROXY` alone (Compose sets it to 1 for nginx). Set
 `CORS_ORIGINS` only if a browser app on another domain will call the API.

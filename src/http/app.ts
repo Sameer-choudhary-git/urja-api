@@ -86,7 +86,8 @@ export function createApp(options: AppOptions): BuiltApp {
       version: options.version ?? "0.1.0",
       description:
         "A clean API over the legacy Urja Meter Ops portal: meters, their network position, " +
-        "transformers and data quality. All /v1 routes need an API key. Errors are RFC 9457 problem+json. " +
+        "transformers, energy readings and data quality. All /v1 routes need an API key: click Authorize, " +
+        "paste the key once, and every Try it out call sends it. Errors are RFC 9457 problem+json. " +
         "How the portal works underneath is documented in PROTOCOL.md.",
     },
     problemSchema,

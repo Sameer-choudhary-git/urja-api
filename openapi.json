@@ -3,7 +3,7 @@
   "info": {
     "title": "Urja Meter API",
     "version": "0.1.0",
-    "description": "A clean API over the legacy Urja Meter Ops portal: meters, their network position, transformers and data quality. All /v1 routes need an API key. Errors are RFC 9457 problem+json. How the portal works underneath is documented in PROTOCOL.md."
+    "description": "A clean API over the legacy Urja Meter Ops portal: meters, their network position, transformers, energy readings and data quality. All /v1 routes need an API key: click Authorize, paste the key once, and every Try it out call sends it. Errors are RFC 9457 problem+json. How the portal works underneath is documented in PROTOCOL.md."
   },
   "servers": [
     {
@@ -12,10 +12,7 @@
   ],
   "security": [
     {
-      "bearerAuth": []
-    },
-    {
-      "apiKeyHeader": []
+      "apiKey": []
     }
   ],
   "paths": {
@@ -6058,15 +6055,11 @@
   },
   "components": {
     "securitySchemes": {
-      "bearerAuth": {
-        "type": "http",
-        "scheme": "bearer",
-        "description": "Authorization: Bearer <api key>"
-      },
-      "apiKeyHeader": {
+      "apiKey": {
         "type": "apiKey",
         "in": "header",
-        "name": "X-API-Key"
+        "name": "X-API-Key",
+        "description": "Paste your API key here (for a review: the key in the README). It is sent as `X-API-Key: <key>`. Clients may send the same key as `Authorization: Bearer <key>` instead; either header works, one is enough."
       }
     },
     "schemas": {

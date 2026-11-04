@@ -180,12 +180,20 @@ export function buildOpenApiDocument(
     openapi: "3.1.0",
     info,
     servers: [{ url: "/" }],
-    security: [{ bearerAuth: [] }, { apiKeyHeader: [] }],
+    // One scheme in the docs, so Swagger UI's Authorize dialog has one box. The server also
+    // accepts `Authorization: Bearer <key>` (same key); that is described here, not as a second box.
+    security: [{ apiKey: [] }],
     paths,
     components: {
       securitySchemes: {
-        bearerAuth: { type: "http", scheme: "bearer", description: "Authorization: Bearer <api key>" },
-        apiKeyHeader: { type: "apiKey", in: "header", name: "X-API-Key" },
+        apiKey: {
+          type: "apiKey",
+          in: "header",
+          name: "X-API-Key",
+          description:
+            "Paste your API key here (for a review: the key in the README). It is sent as `X-API-Key: <key>`. " +
+            "Clients may send the same key as `Authorization: Bearer <key>` instead; either header works, one is enough.",
+        },
       },
       schemas: { Problem: toSchema(problemSchema, "output") },
     },

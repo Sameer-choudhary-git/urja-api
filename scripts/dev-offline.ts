@@ -5,7 +5,8 @@
  *
  *   npm run dev:offline            # http://localhost:3000/docs, auth disabled
  *
- * Data: fixtures/local/meter-export.json if you have it (all 403 meters),
+ * Data: fixtures/local/meter-export.json if you fetched one, else the committed
+ * snapshot fixtures/meter-export.json (all 403 meters),
  * otherwise the 14-meter test sample. Useful for frontend work, demos, and
  * anywhere the real portal is not reachable.
  */
@@ -21,12 +22,14 @@ import { exportFileSchema, exportResponseSchema } from "../src/portal/schemas.js
 import { startFakePortal } from "../test/helpers/fakePortal.js";
 import { sampleExport } from "../test/helpers/sample.js";
 
-const LOCAL_EXPORT = "fixtures/local/meter-export.json";
+/** A fresh `npm run fetch-export` (git-ignored) wins over the committed snapshot of all 403 meters. */
+const EXPORT_FILES = ["fixtures/local/meter-export.json", "fixtures/meter-export.json"];
 const port = Number(process.env.PORT ?? 3000);
 
 function loadMeters() {
-  if (!existsSync(LOCAL_EXPORT)) return sampleExport;
-  const raw: unknown = JSON.parse(readFileSync(LOCAL_EXPORT, "utf8"));
+  const file = EXPORT_FILES.find((f) => existsSync(f));
+  if (file === undefined) return sampleExport;
+  const raw: unknown = JSON.parse(readFileSync(file, "utf8"));
   const asArray = exportFileSchema.safeParse(raw);
   return asArray.success ? asArray.data : exportResponseSchema.parse(raw).data;
 }

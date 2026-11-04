@@ -1,8 +1,8 @@
 /**
  * Offline data-quality scan of an export file. No portal access needed.
  *
- *   npm run scan -- fixtures/local/meter-export.json
- *   npm run scan -- fixtures/local/meter-export.json --json > report.json
+ *   npm run scan -- fixtures/meter-export.json
+ *   npm run scan -- fixtures/meter-export.json --json > report.json
  *
  * Accepts both shapes: the UI's downloaded file (a bare array) and the raw
  * API response (`{ data, total }`, as saved by `npm run fetch-export`).
@@ -13,7 +13,7 @@ import { scanExport, type QualityReport } from "../src/quality/scanExport.js";
 
 const args = process.argv.slice(2);
 const asJson = args.includes("--json");
-const path = args.find((arg) => !arg.startsWith("--")) ?? "fixtures/local/meter-export.json";
+const path = args.find((arg) => !arg.startsWith("--")) ?? "fixtures/meter-export.json";
 
 const raw: unknown = JSON.parse(await readFile(path, "utf8"));
 const meters = parseMeters(raw);

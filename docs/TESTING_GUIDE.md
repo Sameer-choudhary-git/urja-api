@@ -53,7 +53,7 @@ Needs `.env` with the portal account. These scripts never print secrets.
 |---|---|---|
 | `npm run smoke` | "Logged in. The portal reports 403 meters", the first meter id, "Smoke test passed" | `portal/authenticator.ts`, `session.ts`, `portalClient.ts` |
 | `npm run fetch-export` | writes `fixtures/local/meter-export.json` with 403 meters | `portal/signing.ts`, `exportApi.ts` |
-| `npm run scan -- fixtures/local/meter-export.json` | 403 meters, 0 duplicate IDs, 22 blank hierarchy cells (all repairable), DT-007 with two names | `quality/scanExport.ts` |
+| `npm run scan` (committed `fixtures/meter-export.json`) | 403 meters, 0 duplicate IDs, 22 blank hierarchy cells (all repairable), DT-007 with two names | `quality/scanExport.ts` |
 | `npm run probe` | signing secret fingerprint identical across calls and logins; energy filter is whole days inclusive; history 1–30 June 2026 | `scripts/probe.ts` |
 | `npm run verify -- --all` (API running: `npm run dev`, or `-- --api http://<EC2_IP>`) | `✓ meter IDs: portal 403, API 403`, `0 unexplained` meter and transformer differences (about 25 explained: repaired blank hierarchy cells and the DT-007 alias), `portal rows missing in the API: 0`, `interval usage adds up to the register change: 403/403`, the reading cadence (how many meters are read once a day), then `✓ PASS` | `quality/parity.ts`, `scripts/verify-parity.ts` |
 | `npm run cross-check` | 39 of 40 sampled meters identical; J100370 differs only in Circle (blank on the page) | `quality/crossCheck.ts`, `portal/fallbackApi.ts` |

@@ -313,6 +313,8 @@ describe("OpenAPI document", () => {
   it("marks public routes as needing no key and documents query parameters", () => {
     expect(paths["/health"]?.get?.security).toEqual([]);
     expect(paths["/v1/meters"]?.get?.security).toBeUndefined(); // inherits the global key requirement
+    // One box in Swagger's Authorize dialog; Bearer still works (every other test here sends Bearer).
+    expect(Object.keys((openApi as { components: { securitySchemes: object } }).components.securitySchemes)).toEqual(["apiKey"]);
     const names = paths["/v1/meters"]?.get?.parameters.map((p) => p.name);
     expect(names).toEqual(expect.arrayContaining(["status", "transformer", "node", "limit", "offset"]));
     expect(paths["/v1/meters/{meterId}"]?.get?.parameters).toEqual([

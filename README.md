@@ -79,50 +79,89 @@ that stops being enough.
 
 ## Quick start
 
-Requirements: Node 20.6 or newer, or just Docker. No paid services.
+There are four ways to try it. **For a review, use 1**: it is the real thing
+(the API in front of the live portal) and takes about two minutes.
 
-```bash
-cp .env.example .env      # fill PORTAL_EMAIL, PORTAL_PASSWORD and API_KEYS; .env is git-ignored
+| | How | Portal | Needs |
+|---|---|---|---|
+| 1 | [Locally against the real portal](#1-locally-against-the-real-portal-recommended) | live | Node 20.6+, the portal account from the brief |
+| 2 | [Locally with Docker](#2-locally-with-docker) (api + nginx, as in production) | live | Docker, the portal account |
+| 3 | [Offline](#3-offline-no-portal-no-env) | in-process fake | Node only |
+| 4 | [Deployed on AWS](#4-deployed-on-aws) | live | a browser |
+
+**Reviewer API key** (already in `.env.example`, also configured on the AWS
+deployment):
+
+```
+uKmXzDqwVrlosCHMOThjrkJeeILTQop6
 ```
 
-**With Docker (closest to production):**
+In Swagger UI, click **Authorize**, paste it into the one box, and every
+"Try it out" call sends it. From code, send it as `X-API-Key: <key>` or
+`Authorization: Bearer <key>`: both headers work, one is enough. It is a review key for a read-only API and
+is published here on purpose; it will be removed after the review.
+
+### 1. Locally against the real portal (recommended)
 
 ```bash
-docker compose up -d --build     # api + nginx gateway on http://localhost
-docker compose ps                # api should become "healthy"
-curl localhost/ready             # 200 once the catalog has loaded
-docker compose logs -f api       # JSON logs
-docker compose down
+git clone <this repo> && cd urja-api
+cp .env.example .env      # then set PORTAL_EMAIL and PORTAL_PASSWORD (the account from the brief)
+npm ci
+npm test                  # 231 tests, offline, about 10 s
+npm run dev               # http://localhost:3000, reads .env
 ```
 
-**With Node:**
+The log shows `catalog.refreshed ... "meters":403` after a few seconds. Then:
+
+- Swagger UI: http://localhost:3000/docs → **Authorize** → paste the reviewer key → try any route.
+- Or the [sample request](#sample-request-and-response) below.
+- Optional, the strongest check: `npm run verify -- --all` compares every
+  meter, transformer and energy row of the live portal with what this API
+  returns, and ends with `PASS` (about 10–15 minutes; it is slow on purpose,
+  the portal rate limits).
+
+(Windows PowerShell: `cp` works as is; use `curl.exe` instead of `curl`.)
+
+### 2. Locally with Docker
+
+```bash
+cp .env.example .env              # PORTAL_EMAIL and PORTAL_PASSWORD, as above
+docker compose up -d --build      # api + nginx gateway on http://localhost
+docker compose ps                 # api becomes "healthy"
+curl localhost/ready              # 200 once the catalog has loaded
+docker compose logs -f api        # JSON logs; docker compose down to stop
+```
+
+Swagger UI at http://localhost/docs (port 80, through nginx).
+
+### 3. Offline (no portal, no .env)
 
 ```bash
 npm ci
-npm test                  # offline: runs against an in-process fake portal
-npm run dev               # real portal, reads .env, restarts on change
-npm run build && npm start   # production build
+npm run dev:offline       # real server and adapter against an in-process fake portal, auth off
 ```
 
-**Without the portal or a `.env`:**
+Uses the committed snapshot of all 403 meters
+(`fixtures/meter-export.json`, captured from the portal's export). Energy
+readings and transformer capacities are synthetic in this mode. Useful to
+look around without credentials; it is not the real data path.
 
-```bash
-npm run dev:offline       # real server + adapter against the fake portal, auth off
-```
+### 4. Deployed on AWS
 
-`dev:offline` uses `fixtures/local/meter-export.json` when it exists (run
-`npm run fetch-export` once), otherwise the 14-meter test sample. Energy
-readings and transformer capacities are synthetic in that mode.
+http://15.252.70.41/docs, with the reviewer key above. Same code as 2, on one
+EC2 instance ([docs/DEPLOY_AWS.md](docs/DEPLOY_AWS.md)).
 
-Then open http://localhost:3000/docs (or http://localhost/docs with Docker).
-Click **Authorize** and paste a key from `API_KEYS` (the part after `name:`).
+A web client built on this API (Next.js, dark theme) lives in its own repo;
+it calls the API through a small server-side proxy so the key never reaches
+the browser.
+
 The raw spec is at `/openapi.json`; the committed copy is regenerated with
 `npm run openapi`.
 
 ## Sample request and response
 
 ```bash
-KEY=replace-me-with-a-long-random-key-000
+KEY=uKmXzDqwVrlosCHMOThjrkJeeILTQop6
 curl -H "Authorization: Bearer $KEY" \
   "localhost:3000/v1/meters?status=faulty&transformer=DT-007&limit=1"
 ```
@@ -226,7 +265,7 @@ Conventions:
 | `npm test` | no | Unit + integration tests against a fake portal built from PROTOCOL.md |
 | `npm run typecheck` | no | Strict TypeScript check |
 | `npm run smoke` | yes | Logs in and reads the first page of meters |
-| `npm run fetch-export` | yes | Fetches all meters via the signed export into `fixtures/local/meter-export.json` |
+| `npm run fetch-export` | yes | Fetches all meters via the signed export into `fixtures/local/meter-export.json` (git-ignored; a snapshot is committed as `fixtures/meter-export.json`) |
 | `npm run scan -- <file>` | no | Data-quality report for an export file (`--json` for machine output) |
 | `npm run probe` | yes | Read-only checks for the open questions in PROTOCOL.md section 6 |
 | `npm run cross-check` | yes | Compares the signed export with the fallback path (`--all` for every meter) |
@@ -376,8 +415,11 @@ Dockerfile, docker-compose.yml, .github/workflows/ci.yml
 - **`/portal/dts` is optional for a refresh.** It only adds capacities and the
   DT-name tie-break, so a failure there degrades the catalog instead of
   blocking it.
-- **The full export is never committed.** `fixtures/local/` is git-ignored;
-  tests use a 14-meter sample chosen for its quirks.
+- **One export snapshot is committed** (`fixtures/meter-export.json`, 403
+  meters, about 360 KB) so the offline mode shows the whole fleet. It holds
+  only meter data, no credentials or session data. Fresh exports go to the
+  git-ignored `fixtures/local/`; tests use a 14-meter sample chosen for its
+  quirks.
 
 - **Express 5** for the HTTP layer: widely known, and v5 forwards errors
   from async handlers to the error middleware without wrappers.
