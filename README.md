@@ -10,10 +10,21 @@ TypeScript service that hides every portal quirk and exposes a consistent API:
 meters, network hierarchy, transformers, half-hourly energy readings, nearby
 search, anomaly detection and transformer loading.
 
+| Live | Link |
+|---|---|
+| Web client (frontend) | https://urja-umber.vercel.app, code at [Sameer-choudhary-git/urja-v0-frontend](https://github.com/Sameer-choudhary-git/urja-v0-frontend) |
+| API on AWS (Swagger UI) | http://15.252.70.41/docs |
+| API source (this repo) | [Sameer-choudhary-git/urja-api](https://github.com/Sameer-choudhary-git/urja-api) |
+
+Every optional extension from the brief was built (hierarchy, index/query
+layer, freshness, robustness, full dataset, web client), plus some extras. See
+[`docs/EXTRAS.md`](docs/EXTRAS.md) for what each one is and how to try it.
+
 | Document | What is in it |
 |---|---|
 | [`PROTOCOL.md`](PROTOCOL.md) | How the portal works: auth, endpoints, signing, data shapes, quirks |
 | [`openapi.json`](openapi.json) | OpenAPI 3.1 spec, generated from the code (also served at `/openapi.json`, Swagger UI at `/docs`) |
+| [`docs/EXTRAS.md`](docs/EXTRAS.md) | Every optional extension and extra: what was built, where, how to try it |
 | [`REFLECTION.md`](REFLECTION.md) | What was hard, what I would change, how AI was used |
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Layers, diagrams and a dry run of one request |
 | [`docs/TESTING_GUIDE.md`](docs/TESTING_GUIDE.md) | Module-by-module manual checks with expected results |
@@ -50,6 +61,7 @@ search, anomaly detection and transformer loading.
 | Robustness | Circuit breaker and concurrency limit around the portal, chaos tests, graceful shutdown, `/health` and `/ready` |
 | HTTP | Express 5, 19 routes (17 under `/v1`, plus `/health` and `/ready`), one route declaration drives validation, types and OpenAPI; API keys; rate limit; RFC 9457 errors; ETags; CORS |
 | Ops | Multi-stage Docker image (non-root, read-only filesystem), Compose with an nginx gateway, GitHub Actions CI, EC2 deploy guide |
+| Web client | Next.js app in a separate repo ([urja-v0-frontend](https://github.com/Sameer-choudhary-git/urja-v0-frontend), live at https://urja-umber.vercel.app): overview, meters, meter detail with charts, map and nearby, hierarchy explorer, transformer load, anomalies, data quality. The API key stays in its server-side proxy |
 | Tests | 231 tests (vitest + supertest) against an in-process fake portal built from PROTOCOL.md; no network needed |
 
 ## Who it is for, and why the responses are rich
@@ -348,7 +360,7 @@ src/
   main.ts                composition root: config -> portal -> catalog -> app -> listen
 scripts/                 smoke, fetch-export, scan-export, probe, cross-check, verify-parity, bench-nearby, dev-offline, export-openapi
 test/                    vitest suites, fake portal, small real-data fixture
-docs/                    architecture, testing guide, verify result, AWS deploy, API examples, web client spec
+docs/                    architecture, extras, testing guide, verify result, AWS deploy, API examples, web client spec
 deploy/                  nginx gateway config, EC2 setup script, deploy.sh + deploy.yml (auto-deploy on push)
 Dockerfile, docker-compose.yml, .github/workflows/ci.yml
 ```
@@ -598,8 +610,11 @@ Being honest about where it stops fitting:
 - **HTTPS inside the app.** TLS belongs at the edge (nginx with a
   certificate, or a load balancer). The deploy guide shows how; it needs a
   domain.
-- **The web client in this repo.** A separate client is specified in
-  `docs/WEB_CLIENT_SPEC.md`; the API is the deliverable.
+- **The web client in this repo.** It lives in its own repo
+  ([urja-v0-frontend](https://github.com/Sameer-choudhary-git/urja-v0-frontend),
+  live at https://urja-umber.vercel.app), so the API stays the deliverable
+  here and the two deploy separately (EC2 and Vercel). It was built from
+  `docs/WEB_CLIENT_SPEC.md`.
 - **Machine-learning anomaly detection.** Explainable rules with named
   thresholds are easier to trust and argue with, and one month of
   synthetic-looking data is too little to train anything on.
