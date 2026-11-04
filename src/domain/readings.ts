@@ -50,6 +50,7 @@ export const READING_ISSUE_CODES = [
   "irregular_interval",
   "register_decreased",
   "power_factor_out_of_range",
+  "bad_value",
 ] as const;
 export type ReadingIssueCode = (typeof READING_ISSUE_CODES)[number];
 
@@ -58,6 +59,13 @@ export interface ReadingIssue {
   /** The reading the issue is about; null when its timestamp could not be read. */
   readonly at: number | null;
   readonly message: string;
+}
+
+/** "48438.74" or 48438.74 -> 48438.74; "", "NaN", "-", null, undefined -> null. */
+export function portalNumber(value: unknown): number | null {
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  if (typeof value !== "string" || !/^\s*-?\d+(\.\d+)?\s*$/.test(value)) return null;
+  return Number(value);
 }
 
 /** Floating-point noise (0.42000000000000455) is removed here. Inputs have 2 decimals. */
@@ -75,12 +83,21 @@ export function deriveReadings(rows: readonly EnergyRow[]): { readings: Reading[
 
   const parsed: { at: number; kwh: number; kvah: number; volt: number }[] = [];
   for (const row of rows) {
-    const at = parsePortalTimestamp(row.timestamp);
+    const at = typeof row.timestamp === "string" ? parsePortalTimestamp(row.timestamp) : null;
     if (at === null) {
-      issues.push({ code: "bad_timestamp", at: null, message: `Unreadable timestamp "${row.timestamp}"; row skipped` });
+      issues.push({ code: "bad_timestamp", at: null, message: `Unreadable timestamp ${JSON.stringify(row.timestamp ?? null)}; row skipped` });
       continue;
     }
-    parsed.push({ at, kwh: Number(row.kwh), kvah: Number(row.kvah), volt: Number(row.voltR) });
+    const kwh = portalNumber(row.kwh);
+    const kvah = portalNumber(row.kvah);
+    const volt = portalNumber(row.voltR);
+    if (kwh === null || kvah === null || volt === null) {
+      // Usage is not lost: the next good reading's interval spans this one (registers are cumulative).
+      const raw = JSON.stringify({ kwh: row.kwh ?? null, kvah: row.kvah ?? null, voltR: row.voltR ?? null });
+      issues.push({ code: "bad_value", at, message: `Reading at ${row.timestamp} has a value that is not a number ${raw}; row skipped, usage carries over to the next reading` });
+      continue;
+    }
+    parsed.push({ at, kwh, kvah, volt });
   }
   // The portal sends rows in time order today; sorting costs little and removes the assumption.
   parsed.sort((a, b) => a.at - b.at);

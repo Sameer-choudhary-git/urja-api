@@ -4,6 +4,7 @@ import {
   PortalError,
   PortalNotFoundError,
   PortalProtocolError,
+  PortalRateLimitedError,
   PortalUnavailableError,
 } from "../portal/errors.js";
 
@@ -64,6 +65,12 @@ export function toProblem(error: unknown): { problem: Problem; headers: Record<s
   }
   if (error instanceof PortalNotFoundError) {
     return { problem: problem(404, "not_found", "Not found", error.message), headers: {} };
+  }
+  if (error instanceof PortalRateLimitedError) {
+    return {
+      problem: problem(503, "upstream_rate_limited", "Portal busy", "The legacy portal is rate limiting requests; try again shortly"),
+      headers: { "retry-after": String(error.retryAfterSeconds) },
+    };
   }
   if (error instanceof PortalCircuitOpenError) {
     return {

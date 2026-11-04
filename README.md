@@ -49,7 +49,7 @@ search, anomaly detection and transformer loading.
 | Robustness | Circuit breaker and concurrency limit around the portal, chaos tests, graceful shutdown, `/health` and `/ready` |
 | HTTP | Express 5, 19 routes (17 under `/v1`, plus `/health` and `/ready`), one route declaration drives validation, types and OpenAPI; API keys; rate limit; RFC 9457 errors; ETags; CORS |
 | Ops | Multi-stage Docker image (non-root, read-only filesystem), Compose with an nginx gateway, GitHub Actions CI, EC2 deploy guide |
-| Tests | 225 tests (vitest + supertest) against an in-process fake portal built from PROTOCOL.md; no network needed |
+| Tests | 231 tests (vitest + supertest) against an in-process fake portal built from PROTOCOL.md; no network needed |
 
 ## Who it is for, and why the responses are rich
 
@@ -312,6 +312,13 @@ Dockerfile, docker-compose.yml, .github/workflows/ci.yml
   exact; it is kept as one longer interval. A bucket only counts usage whose
   whole interval fits in it, so a once-a-day meter has daily totals but no
   hourly ones, and it is left out of half-hourly transformer loading.
+- A portal energy row with a value that is not a number (seen once, on
+  J100089) is skipped and reported as a `bad_value` reading issue; the rest of
+  the month is still served, and the next reading's interval covers the gap.
+- A portal `429` (it rate limits the energy endpoint) is waited out with the
+  portal's `Retry-After`, or 1, 2, 4, 8 s, and does not open the circuit
+  breaker: the portal is healthy, just busy. If it persists the API answers
+  503 `upstream_rate_limited` with `Retry-After`.
 - `/portal/dts` is the dedicated transformer list, so its names are canonical
   where the meter records disagree (DT-007).
 - The portal data looks static (history ends on 30 June 2026), but nothing

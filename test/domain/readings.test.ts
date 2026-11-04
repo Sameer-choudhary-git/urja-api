@@ -77,6 +77,19 @@ describe("deriveReadings", () => {
     expect(summary).toMatchObject({ totalKwh: 26.58, intervals: 144, expectedIntervals: 144, readingIntervalMinutes: 1440, peak: null });
   });
 
+  it("skips a row with a non-numeric value (seen on J100089) and carries its usage to the next reading", () => {
+    const { readings, issues } = deriveReadings([
+      row("01/06/2026 00:00", "10.00", "11.00"),
+      { timestamp: "01/06/2026 00:30", kwh: "", kvah: "11.50", voltR: "NaN" },
+      row("01/06/2026 01:00", "11.00", "12.10"),
+      row("01/06/2026 01:30", "11.50", "12.70"),
+      row("01/06/2026 02:00", "12.00", "13.30"),
+    ]);
+    expect(issues.map((i) => i.code)).toEqual(["bad_value", "reading_gap"]);
+    expect(issues[0]).toMatchObject({ at: ist("2026-06-01T00:30:00") });
+    expect(readings.map((r) => [r.intervalMinutes, r.intervalKwh])).toEqual([[30, null], [60, 1], [30, 0.5], [30, 0.5]]);
+  });
+
   it("gives no power factor when there was no load", () => {
     const { readings } = deriveReadings([row("01/06/2026 00:00", "5.00", "6.00"), row("01/06/2026 00:30", "5.00", "6.00")]);
     expect(readings[1]).toMatchObject({ intervalKwh: 0, powerFactor: null });

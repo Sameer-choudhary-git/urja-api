@@ -66,6 +66,14 @@ describe("compareReadings", () => {
     expect(result).toMatchObject({ missingInApi: [], droppedAndReported: 1 });
   });
 
+  it("treats a non-numeric portal row the API reported as bad_value as dropped on purpose", () => {
+    const withBad = rows.map((r, i) => (i === 30 ? { ...r, kwh: "", voltR: "-" } : r));
+    const derived = deriveReadings(withBad);
+    const result = compareReadings("J100089", withBad, apiReadings(withBad), derived.issues.map((i) => i.code));
+    expect(result).toMatchObject({ missingInApi: [], droppedAndReported: 1, apiRows: 1439 });
+    expect(compareReadings("J100089", withBad, apiReadings(withBad), []).missingInApi).toEqual([rows[30]!.timestamp]);
+  });
+
   it("sees a once-a-day meter (J100040) as complete", () => {
     const daily = generateEnergy("J100040");
     const result = compareReadings("J100040", daily, apiReadings(daily), []);

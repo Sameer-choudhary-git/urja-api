@@ -1,6 +1,7 @@
 import type { EnergyRow, ExportMeter, TransformerRow } from "../portal/schemas.js";
 import { HIERARCHY_LEVELS } from "../portal/schemas.js";
 import { parsePortalTimestamp, toIstIso } from "../domain/time.js";
+import { portalNumber } from "../domain/readings.js";
 
 /**
  * Parity check: does the API return everything the portal has, unchanged?
@@ -152,7 +153,7 @@ export interface ReadingsParity {
   readonly apiRows: number;
   /** Portal rows with no API reading at the same time, minus those the API reported as dropped. */
   readonly missingInApi: string[];
-  /** Rows the API left out on purpose and reported as reading issues (bad timestamp, conflicting duplicate). */
+  /** Rows the API left out on purpose and reported as reading issues (bad timestamp or value, conflicting duplicate). */
   readonly droppedAndReported: number;
   readonly extraInApi: string[];
   readonly differences: ParityDifference[];
@@ -180,42 +181,56 @@ export function compareReadings(
   let dropped = 0;
 
   const badTimestamps = apiIssueCodes.filter((c) => c === "bad_timestamp").length;
+  const badValues = apiIssueCodes.filter((c) => c === "bad_value").length;
+  let badValueSeen = 0;
   const duplicates = apiIssueCodes.filter((c) => c === "duplicate_reading").length;
   let badSeen = 0;
   let dupSeen = 0;
 
   for (const row of portal) {
-    const at = parsePortalTimestamp(row.timestamp);
+    const label = String(row.timestamp);
+    const at = typeof row.timestamp === "string" ? parsePortalTimestamp(row.timestamp) : null;
     if (at === null) {
       if (badSeen < badTimestamps) {
         badSeen += 1;
         dropped += 1;
-      } else missing.push(row.timestamp);
+      } else missing.push(label);
+      continue;
+    }
+    const kwh = portalNumber(row.kwh);
+    const kvah = portalNumber(row.kvah);
+    const volt = portalNumber(row.voltR);
+    if (kwh === null || kvah === null || volt === null) {
+      // A row with a non-numeric value: the API skips it and reports a bad_value issue.
+      if (badValueSeen < badValues) {
+        badValueSeen += 1;
+        dropped += 1;
+      } else missing.push(label);
       continue;
     }
     const iso = toIstIso(at);
     if (seen.has(iso)) {
       // Same time twice: the API keeps the first and reports a conflicting second one.
       const first = apiByTime.get(iso);
-      const identical = first !== undefined && Number(row.kwh) === first.kwhRegister && Number(row.kvah) === first.kvahRegister;
+      const identical = first !== undefined && kwh === first.kwhRegister && kvah === first.kvahRegister;
       if (identical) dropped += 1;
       else if (dupSeen < duplicates) {
         dupSeen += 1;
         dropped += 1;
-      } else missing.push(row.timestamp);
+      } else missing.push(label);
       continue;
     }
     seen.add(iso);
     const a = apiByTime.get(iso);
     if (a === undefined) {
-      missing.push(row.timestamp);
+      missing.push(label);
       continue;
     }
     const add = (field: string, portalValue: number, apiValue: number) =>
-      portalValue !== apiValue && differences.push({ subject: `${meterId} ${row.timestamp}`, field, portal: portalValue, api: apiValue, explained: false });
-    add("kwh", Number(row.kwh), a.kwhRegister);
-    add("kvah", Number(row.kvah), a.kvahRegister);
-    add("voltR", Number(row.voltR), a.voltageR);
+      portalValue !== apiValue && differences.push({ subject: `${meterId} ${label}`, field, portal: portalValue, api: apiValue, explained: false });
+    add("kwh", kwh, a.kwhRegister);
+    add("kvah", kvah, a.kvahRegister);
+    add("voltR", volt, a.voltageR);
   }
 
   const extra = api.filter((r) => !seen.has(r.timestamp)).map((r) => r.timestamp);

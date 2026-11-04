@@ -55,6 +55,20 @@ export class PortalCircuitOpenError extends PortalUnavailableError {
   }
 }
 
+/**
+ * The portal throttled us (HTTP 429) and kept doing so after waiting. The
+ * portal itself is healthy, so this does NOT count towards the circuit
+ * breaker; the caller should simply come back after `retryAfterSeconds`.
+ */
+export class PortalRateLimitedError extends PortalUnavailableError {
+  constructor(
+    message: string,
+    readonly retryAfterSeconds: number,
+  ) {
+    super(message, { upstreamStatus: 429 });
+  }
+}
+
 /** The portal answered, but not in the shape we documented in PROTOCOL.md. */
 export class PortalProtocolError extends PortalError {
   readonly code = "PORTAL_PROTOCOL_ERROR" as const;

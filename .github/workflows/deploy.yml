@@ -40,8 +40,13 @@ jobs:
           EC2_HOST: ${{ secrets.EC2_HOST }}
         run: |
           install -m 700 -d ~/.ssh
-          printf '%s\n' "$EC2_SSH_KEY" > ~/.ssh/deploy_key
+          # Windows copy-paste can add \r or trailing spaces, which ssh reports as "error in libcrypto".
+          printf '%s\n' "$EC2_SSH_KEY" | tr -d '\r' | sed 's/[[:space:]]*$//' > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
+          if ! ssh-keygen -y -f ~/.ssh/deploy_key > /dev/null; then
+            echo "::error::EC2_SSH_KEY is not a valid private key. Paste the WHOLE file, from -----BEGIN OPENSSH PRIVATE KEY----- to -----END OPENSSH PRIVATE KEY-----, with its line breaks."
+            exit 1
+          fi
           ssh-keyscan -T 15 -H "$EC2_HOST" >> ~/.ssh/known_hosts
 
       - name: Pull and restart on the server

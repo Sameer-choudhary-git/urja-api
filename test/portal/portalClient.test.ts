@@ -5,9 +5,10 @@ import {
   PortalAuthError,
   PortalNotFoundError,
   PortalProtocolError,
+  PortalRateLimitedError,
   PortalUnavailableError,
 } from "../../src/portal/errors.js";
-import { PortalClient } from "../../src/portal/portalClient.js";
+import { parseRetryAfter, PortalClient } from "../../src/portal/portalClient.js";
 import { SessionManager } from "../../src/portal/session.js";
 import { startFakePortal, type FakePortal } from "../helpers/fakePortal.js";
 
@@ -108,6 +109,41 @@ describe("PortalClient (against a fake portal)", () => {
       PortalUnavailableError,
     );
     expect(portal.stats.searchRequests).toBe(3); // 1 attempt + 2 retries
+  });
+
+  it("waits longer on a 429 and gets a few extra attempts (the portal rate limits)", async () => {
+    const waits: number[] = [];
+    client = new PortalClient({
+      baseUrl: portal.baseUrl,
+      sessions: new SessionManager({
+        authenticator: new PortalAuthenticator({ baseUrl: portal.baseUrl, email: "operator@urja.local", password: "correct-horse", timeoutMs: 2_000 }),
+      }),
+      timeoutMs: 2_000,
+      maxRetries: 2,
+      sleep: async (ms) => void waits.push(ms),
+      random: () => 1,
+    });
+    portal.failNextSearches(429, 4); // more than maxRetries, fewer than maxRetries + extra
+
+    const page = await client.get("/portal/meters/search", searchPage);
+
+    expect(page.total).toBe(403);
+    expect(waits).toEqual([1_000, 2_000, 4_000, 8_000]);
+  });
+
+  it("gives up on a 429 with PortalRateLimitedError, which does not trip the breaker", async () => {
+    portal.failNextSearches(429, 20);
+
+    const error = await client.get("/portal/meters/search", searchPage).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(PortalRateLimitedError);
+    expect(portal.stats.searchRequests).toBe(6); // 1 attempt + 2 retries + 3 extra for 429
+  });
+
+  it("reads Retry-After as seconds or an HTTP date", () => {
+    expect(parseRetryAfter("3", 0)).toBe(3_000);
+    expect(parseRetryAfter(new Date(10_000).toUTCString(), 4_000)).toBe(6_000);
+    expect(parseRetryAfter(null, 0)).toBeNull();
+    expect(parseRetryAfter("soon", 0)).toBeNull();
   });
 
   it("does not retry when retries are disabled", async () => {

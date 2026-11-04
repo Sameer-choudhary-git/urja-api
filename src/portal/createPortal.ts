@@ -2,7 +2,7 @@ import type { PortalConfig } from "../config.js";
 import { noopLogger, type Logger } from "../logger.js";
 import { CircuitBreaker } from "../shared/circuitBreaker.js";
 import { ConcurrencyLimiter } from "../shared/concurrencyLimiter.js";
-import { PortalAuthError, PortalUnavailableError } from "./errors.js";
+import { PortalAuthError, PortalRateLimitedError, PortalUnavailableError } from "./errors.js";
 import { PortalAuthenticator } from "./authenticator.js";
 import { PortalExportApi } from "./exportApi.js";
 import { PortalEnergyApi } from "./energyApi.js";
@@ -34,7 +34,9 @@ export function createPortal(config: PortalConfig, logger: Logger = noopLogger):
   const breaker = new CircuitBreaker({
     failureThreshold: config.breakerThreshold ?? 5,
     openMs: config.breakerOpenMs ?? 30_000,
-    isFailure: (error) => error instanceof PortalUnavailableError || error instanceof PortalAuthError,
+    // A 429 means the portal is up but throttling: back off, do not open the circuit.
+    isFailure: (error) =>
+      (error instanceof PortalUnavailableError && !(error instanceof PortalRateLimitedError)) || error instanceof PortalAuthError,
     onStateChange: (from, to) => logger[to === "open" ? "warn" : "info"]("portal.circuit", { from, to }),
   });
   const limiter = new ConcurrencyLimiter({ maxConcurrent: config.maxConcurrency ?? 4, maxQueue: config.maxQueue ?? 200 });

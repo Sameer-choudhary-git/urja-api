@@ -96,19 +96,25 @@ export const transformerPageSchema = z.object({
 
 export type TransformerRow = z.infer<typeof transformerRowSchema>;
 
-/** A decimal number sent as a string, e.g. "48438.74" or "226". */
-const numericString = z.string().regex(/^-?\d+(\.\d+)?$/, "expected a decimal number in a string");
+/**
+ * A register value as the portal sends it: normally a decimal number in a
+ * string ("48438.74", "226"). Kept loose on purpose: on 2026-11-04 meter
+ * J100089 had one row whose kwh and voltR were not numbers, and a strict
+ * schema rejected the whole month. The readings code checks each value and
+ * reports a bad row as a reading issue instead (domain/readings.ts).
+ */
+const rawValue = z.union([z.string(), z.number(), z.null()]).optional();
 
 /**
- * One row of `GET /portal/meters/{id}/energy`. Everything is a string; the
- * timestamp is `DD/MM/YYYY HH:mm` with no timezone (PROTOCOL.md 3.3).
- * `kwh` and `kvah` are cumulative registers, not per-interval usage.
+ * One row of `GET /portal/meters/{id}/energy`. Normally everything is a
+ * string; the timestamp is `DD/MM/YYYY HH:mm` with no timezone (PROTOCOL.md
+ * 3.3). `kwh` and `kvah` are cumulative registers, not per-interval usage.
  */
 export const energyRowSchema = z.object({
-  timestamp: z.string().regex(/^\d{2}\/\d{2}\/\d{4} \d{2}:\d{2}$/, "expected DD/MM/YYYY HH:mm"),
-  kwh: numericString,
-  kvah: numericString,
-  voltR: numericString,
+  timestamp: z.union([z.string(), z.null()]).optional(),
+  kwh: rawValue,
+  kvah: rawValue,
+  voltR: rawValue,
 });
 
 export const energyResponseSchema = z.object({

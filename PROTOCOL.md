@@ -188,11 +188,19 @@ What this shows:
 - **One request is not capped**: a 30-day range returns all 1440 rows (about 115 KB, estimated from the 7-day size). A range wider than the data is clipped to it, not rejected.
 - The default (no query) window starts at 23:30 the day before, which is why it has 337 rows and not 336.
 - An empty or reversed range is a normal `200` with an empty list, not an error.
-- **Not every meter is half-hourly.** Some meters (seen on J100040, found by
-  Sameer in the portal UI on 2026-11-04) have only one reading a day, at 00:00,
-  in the same shape (`timestamp`, `kwh`, `kvah`, `voltR`). The portal's own
-  meter page shows the same daily rows. The API detects the cadence per meter
-  from the usual step between readings rather than assuming 30 minutes.
+- **Not every meter is half-hourly.** Seen with `npm run verify` on
+  2026-11-04: of the first 115 meters compared, 40 had 1440 half-hourly rows
+  for June and **75 (J100040 to J100115) had one reading a day**, at 00:00 (30
+  rows), in the same shape (`timestamp`, `kwh`, `kvah`, `voltR`). The portal's
+  own meter page shows the same daily rows. The rest of the fleet was not
+  compared in that run (see the rate limit below), so the cadence has to be
+  detected per meter, never assumed.
+- **Values are not always numbers.** J100089 had one row (index 30 of June)
+  whose `kwh` and `voltR` were not decimal strings, while the rest of the
+  month was normal.
+- **The energy endpoint is rate limited.** About 230 energy calls in 6 seconds
+  (two clients at once) started `429` answers; short retries kept getting
+  `429`. Whether a `Retry-After` header is sent was not captured.
 
 ### 3.4 Meter location
 

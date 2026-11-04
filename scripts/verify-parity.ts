@@ -6,9 +6,11 @@
  *   npm run verify -- --all                          # readings of every meter (403 x 2 calls, a few minutes)
  *   npm run verify -- --api http://15.252.70.41      # check the deployed API
  *   npm run verify -- --meters J100040,J100000       # just these meters' readings
+ *   npm run verify -- --pause 500                    # slower, if the portal answers 429
  *
  * Needs .env with PORTAL_EMAIL / PORTAL_PASSWORD (to read the portal directly)
- * and an API key: VERIFY_API_KEY, or the first key in API_KEYS. Read-only on
+ * and an API key: VERIFY_API_KEY, or the first key in API_KEYS (for the EC2 API,
+ * set VERIFY_API_KEY to a key from the SERVER's .env). Read-only on
  * both sides. Exit code 0 = no unexplained difference, 1 = something to look at.
  *
  * What it checks:
@@ -24,6 +26,7 @@
 import { loadPortalConfig, parseApiKeys } from "../src/config.js";
 import { createJsonLogger } from "../src/logger.js";
 import { createPortal } from "../src/portal/createPortal.js";
+import { PortalCircuitOpenError, PortalRateLimitedError } from "../src/portal/errors.js";
 import {
   compareMeters,
   compareReadings,
@@ -62,14 +65,21 @@ async function api<T>(path: string, query: Record<string, string | number> = {})
   const url = `${apiBase}${path}?${new URLSearchParams(Object.entries(query).map(([k, v]): [string, string] => [k, String(v)]))}`;
   for (let attempt = 0; ; attempt += 1) {
     const res = await fetch(url, { headers: { "x-api-key": apiKey! }, signal: AbortSignal.timeout(90_000) });
-    if (res.status === 429 && attempt < 5) {
-      await new Promise((r) => setTimeout(r, Number(res.headers.get("retry-after") ?? 10) * 1000));
+    // 429 = our API's own rate limit; 503 = the portal behind it is busy or recovering. Both say when to retry.
+    if ((res.status === 429 || res.status === 503) && attempt < 6) {
+      const wait = Math.min(Number(res.headers.get("retry-after") ?? 10), 30);
+      await res.body?.cancel();
+      await sleep(wait * 1000);
       continue;
     }
     if (!res.ok) throw new Error(`${path}: HTTP ${res.status} ${(await res.text()).slice(0, 200)}`);
     return (await res.json()) as T;
   }
 }
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+/** Pause between meters, so this check does not itself trip the portal's rate limit (it does at ~40 calls/s). */
+const pauseMs = Number(arg("--pause") ?? 250);
 
 const portal = createPortal(loadPortalConfig(), createJsonLogger("warn", { script: "verify" }));
 let problems = 0;
@@ -115,19 +125,29 @@ console.log(`\n3. Readings ${DAYS.from}..${DAYS.to} for ${sample.length} meter(s
 const failures: { meterId: string; error: string }[] = [];
 let done = 0;
 const results = (
-  await mapPool(sample, 2, async (meterId): Promise<ReadingsParity | null> => {
+  // One meter at a time, portal first and then the API, with a short pause: slow but polite.
+  await mapPool(sample, 1, async (meterId): Promise<ReadingsParity | null> => {
     try {
-      const [rows, res] = await Promise.all([
-        portal.energyApi.fetchReadings(meterId, DAYS),
-        api<{ data: { items: ApiReadingLike[]; issues: { code: string }[] } }>(`/v1/meters/${meterId}/readings`, { ...API_WINDOW, granularity: "raw" }),
-      ]);
-      return compareReadings(meterId, rows, res.data.items, res.data.issues.map((i) => i.code));
+      for (let attempt = 1; ; attempt += 1) {
+        try {
+          const rows = await portal.energyApi.fetchReadings(meterId, DAYS);
+          const res = await api<{ data: { items: ApiReadingLike[]; issues: { code: string }[] } }>(`/v1/meters/${meterId}/readings`, { ...API_WINDOW, granularity: "raw" });
+          return compareReadings(meterId, rows, res.data.items, res.data.issues.map((i) => i.code));
+        } catch (error) {
+          // Busy portal (429, open circuit): wait and try the same meter again, up to 3 times.
+          const busy = error instanceof PortalRateLimitedError || error instanceof PortalCircuitOpenError;
+          if (!busy || attempt >= 3) throw error;
+          console.log(`   ${meterId}: portal busy, waiting 30 s (attempt ${attempt}/3)`);
+          await sleep(30_000);
+        }
+      }
     } catch (error) {
       failures.push({ meterId, error: error instanceof Error ? error.message : String(error) });
       return null;
     } finally {
       done += 1;
       if (done % 20 === 0) console.log(`   ... ${done}/${sample.length}`);
+      await sleep(pauseMs);
     }
   })
 ).filter((r) => r !== null);

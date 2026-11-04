@@ -6,6 +6,7 @@ import {
   PortalCircuitOpenError,
   PortalNotFoundError,
   PortalProtocolError,
+  PortalRateLimitedError,
   PortalUnavailableError,
 } from "./errors.js";
 import type { SessionProvider } from "./session.js";
@@ -63,6 +64,15 @@ export interface PortalClientOptions {
 const RETRYABLE_STATUSES: ReadonlySet<number> = new Set([429, 500, 502, 503, 504]);
 const BACKOFF_BASE_MS = 200;
 const BACKOFF_MAX_MS = 2_000;
+/**
+ * 429 = the portal is rate limiting us (seen live on 2026-11-04 after about
+ * 230 energy calls in 6 seconds). Waiting 200 ms does not help there, so a
+ * 429 waits for the portal's Retry-After, or 1 s, 2 s, 4 s ... up to 15 s,
+ * and gets a few more attempts than other errors.
+ */
+const RATE_LIMIT_BASE_MS = 1_000;
+const RATE_LIMIT_MAX_MS = 15_000;
+const RATE_LIMIT_EXTRA_RETRIES = 3;
 
 /**
  * Authenticated, validated, resilient GET access to the portal's JSON endpoints.
@@ -171,6 +181,20 @@ export class PortalClient {
         throw new PortalNotFoundError(message, { upstreamStatus: 404 });
       }
 
+      if (response.status === 429) {
+        const retryAfterMs = parseRetryAfter(response.headers.get("retry-after"), Date.now());
+        await discard(response);
+        if (retries < this.maxRetries + RATE_LIMIT_EXTRA_RETRIES) {
+          retries += 1;
+          const ceiling = Math.min(RATE_LIMIT_BASE_MS * 2 ** (retries - 1), RATE_LIMIT_MAX_MS);
+          const delayMs = Math.min(retryAfterMs ?? Math.round(ceiling * (0.5 + this.random() * 0.5)), RATE_LIMIT_MAX_MS);
+          this.logger.warn("portal.rate_limited", { path, retry: retries, delayMs });
+          await this.sleep(delayMs);
+          continue;
+        }
+        throw new PortalRateLimitedError("Portal kept answering HTTP 429 (rate limited)", Math.ceil((retryAfterMs ?? RATE_LIMIT_MAX_MS) / 1000));
+      }
+
       if (RETRYABLE_STATUSES.has(response.status)) {
         await discard(response);
         if (retries < this.maxRetries) {
@@ -233,6 +257,15 @@ export class PortalClient {
     this.logger.warn("portal.retry", { path, retry, delayMs, reason });
     await this.sleep(delayMs);
   }
+}
+
+/** Retry-After as seconds or an HTTP date -> milliseconds to wait; null if absent or unreadable. */
+export function parseRetryAfter(value: string | null, now: number): number | null {
+  if (value === null || value.trim() === "") return null;
+  const seconds = Number(value);
+  if (Number.isFinite(seconds) && seconds >= 0) return seconds * 1000;
+  const date = Date.parse(value);
+  return Number.isNaN(date) ? null : Math.max(0, date - now);
 }
 
 function describe(cause: unknown): string {

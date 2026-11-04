@@ -46,7 +46,7 @@ git remote add origin https://github.com/<you>/urja-api.git
 git push -u origin main
 ```
 
-On GitHub, open the **Actions** tab: the CI run (typecheck, 225 tests, build,
+On GitHub, open the **Actions** tab: the CI run (typecheck, 231 tests, build,
 Docker build) should go green within a few minutes.
 
 ## 2. Launch the instance (AWS console)

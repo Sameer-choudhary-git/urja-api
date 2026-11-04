@@ -2325,7 +2325,8 @@
                                   "reading_gap",
                                   "irregular_interval",
                                   "register_decreased",
-                                  "power_factor_out_of_range"
+                                  "power_factor_out_of_range",
+                                  "bad_value"
                                 ]
                               },
                               "at": {

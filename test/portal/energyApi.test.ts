@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { createPortal } from "../../src/portal/createPortal.js";
 import { PortalNotFoundError } from "../../src/portal/errors.js";
-import { filterEnergy, generateEnergy } from "../helpers/fakeEnergy.js";
+import { filterEnergy, generateEnergy, type FakeEnergyRow } from "../helpers/fakeEnergy.js";
 import { startFakePortal, type FakePortal } from "../helpers/fakePortal.js";
 import { sampleExport } from "../helpers/sample.js";
 
@@ -34,8 +34,8 @@ describe("PortalEnergyApi (against the fake portal)", () => {
   let fake: FakePortal;
   afterEach(async () => fake.close());
 
-  async function setup() {
-    fake = await startFakePortal({ exportMeters: sampleExport });
+  async function setup(energy?: (meterId: string) => readonly FakeEnergyRow[] | undefined) {
+    fake = await startFakePortal({ exportMeters: sampleExport, ...(energy && { energy }) });
     return createPortal({ baseUrl: fake.baseUrl, email: "operator@urja.local", password: "correct-horse", timeoutMs: 2_000, maxRetries: 1 }).energyApi;
   }
 
@@ -57,5 +57,13 @@ describe("PortalEnergyApi (against the fake portal)", () => {
     await expect(api.fetchReadings("J999999", null)).rejects.toBeInstanceOf(PortalNotFoundError);
     fake.failNextEnergy(503, 1);
     expect(await api.fetchReadings("J100000", null)).toHaveLength(337);
+  });
+
+  it("accepts a month with one non-numeric row instead of rejecting all of it (J100089, 2026-11-04)", async () => {
+    const rows = generateEnergy("J100089").map((r, i) => (i === 30 ? { ...r, kwh: "", voltR: "NaN" } : r));
+    const api = await setup(() => rows);
+    const result = await api.fetchReadings("J100089", { from: "2026-06-01", to: "2026-06-30" });
+    expect(result).toHaveLength(1440);
+    expect(result[30]).toMatchObject({ kwh: "", voltR: "NaN" });
   });
 });
