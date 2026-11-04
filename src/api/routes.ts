@@ -189,8 +189,10 @@ export function registerRoutes(registry: RouteRegistry, context: ApiContext): vo
     operationId: "getMeterReadings",
     summary: "Energy readings: half-hourly, or summed per hour or day",
     description:
-      "The portal stores cumulative registers every 30 minutes. This returns them with the usage of each half hour " +
+      "The portal stores cumulative registers, every 30 minutes for most meters and once a day for some " +
+      "(`summary.readingIntervalMinutes` says which). This returns them with the usage of each interval " +
       "(the difference to the previous reading), power factor, and optional hourly or daily totals. " +
+      "Usage only counts in a bucket the whole interval fits in, so a once-a-day meter has daily totals but no hourly ones. " +
       "Without from/to you get the 7 days ending at the newest reading. A window is at most 31 days. " +
       "History currently covers 1 to 30 June 2026 (PROTOCOL.md 3.3). Times are IST (+05:30).",
     tags: ["Meters"],
@@ -224,6 +226,7 @@ export function registerRoutes(registry: RouteRegistry, context: ApiContext): vo
               kwhRegister: reading.kwhRegister,
               kvahRegister: reading.kvahRegister,
               voltageR: reading.voltageR,
+              intervalMinutes: reading.intervalMinutes,
               intervalKwh: reading.intervalKwh,
               intervalKvah: reading.intervalKvah,
               powerFactor: reading.powerFactor,
@@ -677,8 +680,8 @@ export function registerRoutes(registry: RouteRegistry, context: ApiContext): vo
               voltageMin: r.voltageR,
               voltageAvg: r.voltageR,
               voltageMax: r.voltageR,
-              intervals: r.intervalKwh === null ? 0 : 1,
-              expectedIntervals: 1,
+              intervals: r.intervalKwh === null ? 0 : Math.round(r.intervalMinutes / 30),
+              expectedIntervals: Math.round(r.intervalMinutes / 30),
               kwhRegister: r.kwhRegister,
               kvahRegister: r.kvahRegister,
             }))

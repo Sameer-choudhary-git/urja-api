@@ -1,0 +1,57 @@
+# Move to .github/workflows/deploy.yml (next to ci.yml).
+#
+# After CI passes on main, SSH into the EC2 host and run deploy/deploy.sh
+# (git pull + docker compose up --build + wait for /ready). Also runnable by
+# hand from the Actions tab ("Run workflow").
+#
+# Repository secrets (Settings > Secrets and variables > Actions):
+#   EC2_HOST     public IP or DNS of the instance, e.g. 15.252.70.41
+#   EC2_USER     ubuntu
+#   EC2_SSH_KEY  the PRIVATE deploy key (whole file, including the BEGIN/END lines)
+# See docs/DEPLOY_AWS.md, "Deploy automatically on push".
+name: Deploy
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# One deploy at a time; a newer push waits for the running one instead of cancelling it mid-build.
+concurrency:
+  group: deploy-ec2
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy to EC2
+    # Only after a green CI run of a push to main (not a pull request), or a manual run.
+    if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Set up the SSH key
+        env:
+          EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$EC2_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -T 15 -H "$EC2_HOST" >> ~/.ssh/known_hosts
+
+      - name: Pull and restart on the server
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          EC2_USER: ${{ secrets.EC2_USER }}
+        # The key is locked to deploy/deploy.sh on the server, so the command here is only a fallback.
+        run: ssh -i ~/.ssh/deploy_key -o BatchMode=yes -o ConnectTimeout=20 "$EC2_USER@$EC2_HOST" "bash ~/urja-api/deploy/deploy.sh"
+
+      - name: Check from outside
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+        run: curl -fsS --retry 5 --retry-delay 3 "http://$EC2_HOST/health"

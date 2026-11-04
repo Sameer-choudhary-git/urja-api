@@ -188,6 +188,11 @@ What this shows:
 - **One request is not capped**: a 30-day range returns all 1440 rows (about 115 KB, estimated from the 7-day size). A range wider than the data is clipped to it, not rejected.
 - The default (no query) window starts at 23:30 the day before, which is why it has 337 rows and not 336.
 - An empty or reversed range is a normal `200` with an empty list, not an error.
+- **Not every meter is half-hourly.** Some meters (seen on J100040, found by
+  Sameer in the portal UI on 2026-11-04) have only one reading a day, at 00:00,
+  in the same shape (`timestamp`, `kwh`, `kvah`, `voltR`). The portal's own
+  meter page shows the same daily rows. The API detects the cadence per meter
+  from the usual step between readings rather than assuming 30 minutes.
 
 ### 3.4 Meter location
 

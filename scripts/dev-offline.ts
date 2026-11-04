@@ -65,5 +65,5 @@ const { app } = createApp({
   logger,
 });
 app.listen(port, () => {
-  logger.info("offline.ready", { meters: meters.length, docs: `http://localhost:${port}/docs`, note: "fake portal, auth disabled" });
+  logger.info("offline.ready", { meters: meters.length, docs: `http://localhost:${port}/docs`, note: "fake portal, auth disabled", portal: fake.baseUrl });
 });

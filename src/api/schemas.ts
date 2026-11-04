@@ -431,12 +431,13 @@ const voltageStatsSchema = z
   .describe("R-phase voltage over the readings, volts.");
 
 const readingItemSchema = z.object({
-  timestamp: istTime.describe("When the registers were read. This reading closes the half hour before it."),
-  intervalStart: istTime.describe("Start of the half hour this reading's usage belongs to (timestamp - 30 min)."),
+  timestamp: istTime.describe("When the registers were read. This reading closes the interval before it."),
+  intervalStart: istTime.describe("Start of the interval this reading's usage belongs to (timestamp - intervalMinutes)."),
   kwhRegister: z.number().describe("Cumulative kWh register (like an odometer)."),
   kvahRegister: z.number().describe("Cumulative kVAh register."),
   voltageR: z.number().describe("R-phase voltage, volts."),
-  intervalKwh: z.number().nullable().describe("kWh used in the half hour; null when the previous reading is missing or the register went down."),
+  intervalMinutes: z.number().describe("Length of the interval: 30 for a half-hourly meter, 1440 for a once-a-day meter, longer after a gap."),
+  intervalKwh: z.number().nullable().describe("kWh used in the interval; null for the first reading or when the register went down."),
   intervalKvah: z.number().nullable(),
   powerFactor: z.number().nullable().describe("intervalKwh / intervalKvah, 0 to 1; null with no load."),
 });
@@ -483,7 +484,8 @@ export const readingsResponse = z.object({
       totalKvah: z.number().nullable(),
       powerFactor: z.number().nullable(),
       voltageR: voltageStatsSchema,
-      peak: z.object({ intervalStart: istTime, kwh: z.number() }).nullable().describe("The half hour with the highest usage."),
+      peak: z.object({ intervalStart: istTime, kwh: z.number() }).nullable().describe("The half hour with the highest usage (null for a once-a-day meter)."),
+      readingIntervalMinutes: z.number().nullable().describe("The meter's usual minutes between readings: 30, or 1440 when it is read once a day."),
       firstReadingAt: istTime.nullable(),
       lastReadingAt: istTime.nullable(),
     }),

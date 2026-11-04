@@ -40,8 +40,8 @@ describe("deriveReadings", () => {
       row("01/06/2026 00:00", "10.00", "11.00"),
       row("01/06/2026 00:00", "99.00", "99.00"), // conflicting duplicate
       row("01/06/2026 00:30", "10.50", "11.60"),
-      row("01/06/2026 02:00", "12.00", "13.00"), // 2 readings missing before it
-      row("01/06/2026 02:10", "12.10", "13.10"), // off the half-hour grid
+      row("01/06/2026 02:00", "12.00", "13.20"), // 2 readings missing before it
+      row("01/06/2026 02:10", "12.10", "13.30"), // off the half-hour grid
       row("01/06/2026 02:40", "11.00", "13.50"), // kWh register went down
       row("01/06/2026 03:10", "11.80", "13.60"), // kWh 0.8 > kVAh 0.1
       row("31/02/2026 00:00", "1", "1"), // impossible date
@@ -55,8 +55,26 @@ describe("deriveReadings", () => {
       "power_factor_out_of_range",
     ]);
     expect(issues.find((i) => i.code === "reading_gap")?.message).toMatch(/^2 reading/);
-    expect(readings.map((r) => r.intervalKwh)).toEqual([null, 0.5, null, null, null, 0.8]);
+    // Registers are cumulative, so usage across the gap is still exact; it covers 90 minutes.
+    expect(readings.map((r) => r.intervalKwh)).toEqual([null, 0.5, 1.5, 0.1, null, 0.8]);
+    expect(readings.map((r) => r.intervalMinutes)).toEqual([30, 30, 90, 10, 30, 30]);
     expect(readings.at(-1)?.powerFactor).toBeNull();
+  });
+
+  it("handles a meter read once a day: daily totals, no hourly ones, no gap issues", () => {
+    const days = ["01", "02", "03", "04"].map((d, i) => row(`${d}/06/2026 00:00`, (100 + i * 8.86).toFixed(2), (110 + i * 9.57).toFixed(2)));
+    const { readings, issues } = deriveReadings(days);
+    expect(issues).toEqual([]);
+    expect(readings[1]).toMatchObject({ intervalMinutes: 1440, intervalKwh: 8.86, intervalKvah: 9.57 });
+
+    const window = { from: ist("2026-06-01T00:00:00"), to: ist("2026-06-04T00:00:00") };
+    const daily = aggregate(readings, window, "day");
+    expect(daily.map((b) => b.kwh)).toEqual([8.86, 8.86, 8.86]);
+    expect(daily.every((b) => b.complete)).toBe(true);
+    expect(aggregate(readings, window, "hour").every((b) => b.kwh === null)).toBe(true);
+
+    const summary = summarize(readings, window);
+    expect(summary).toMatchObject({ totalKwh: 26.58, intervals: 144, expectedIntervals: 144, readingIntervalMinutes: 1440, peak: null });
   });
 
   it("gives no power factor when there was no load", () => {

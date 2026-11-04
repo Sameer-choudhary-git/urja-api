@@ -91,13 +91,14 @@ export function detectMeterAnomalies(
 
   // Zero consumption: longest run of known, zero intervals.
   if (meter.status !== "decommissioned") {
+    // Counted in half hours, so a zero day on a once-a-day meter counts as 48.
     let run = 0;
     let runStart: number | null = null;
     let best = { length: 0, start: null as number | null };
     for (const r of selected) {
       if (r.intervalKwh === 0) {
         if (run === 0) runStart = intervalStart(r);
-        run += 1;
+        run += Math.round(r.intervalMinutes / 30);
         if (run > best.length) best = { length: run, start: runStart };
       } else {
         run = 0;
@@ -116,12 +117,14 @@ export function detectMeterAnomalies(
   }
 
   // Spikes: robust statistics, so one huge spike does not hide itself by raising the mean.
-  const usage = selected.map((r) => r.intervalKwh).filter((v): v is number => v !== null);
+  // Only half-hour intervals are compared; a daily or gap-spanning figure is not a spike.
+  const halfHours = selected.filter((r) => r.intervalMinutes === 30);
+  const usage = halfHours.map((r) => r.intervalKwh).filter((v): v is number => v !== null);
   if (usage.length >= 48) {
     const med = median(usage);
     const mad = median(usage.map((v) => Math.abs(v - med)));
     const limit = Math.max(med + THRESHOLDS.spikeMadFactor * mad, THRESHOLDS.spikeMinKwh);
-    const spikes = selected.filter((r) => r.intervalKwh !== null && r.intervalKwh > limit);
+    const spikes = halfHours.filter((r) => r.intervalKwh !== null && r.intervalKwh > limit);
     if (spikes.length > 0) {
       const top = spikes.reduce((a, b) => ((a.intervalKwh ?? 0) >= (b.intervalKwh ?? 0) ? a : b));
       found.push({
@@ -198,7 +201,8 @@ export function transformerLoad(
   const buckets = new Map<number, { kva: number; meters: number }>();
   for (const readings of perMeter) {
     for (const r of inWindow(readings, window)) {
-      if (r.intervalKvah === null) continue;
+      // Demand per half hour needs half-hour data; once-a-day meters cannot contribute.
+      if (r.intervalKvah === null || r.intervalMinutes !== 30) continue;
       const key = intervalStart(r);
       const bucket = buckets.get(key) ?? { kva: 0, meters: 0 };
       bucket.kva += r.intervalKvah * 2;

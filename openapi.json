@@ -1929,7 +1929,7 @@
       "get": {
         "operationId": "getMeterReadings",
         "summary": "Energy readings: half-hourly, or summed per hour or day",
-        "description": "The portal stores cumulative registers every 30 minutes. This returns them with the usage of each half hour (the difference to the previous reading), power factor, and optional hourly or daily totals. Without from/to you get the 7 days ending at the newest reading. A window is at most 31 days. History currently covers 1 to 30 June 2026 (PROTOCOL.md 3.3). Times are IST (+05:30).",
+        "description": "The portal stores cumulative registers, every 30 minutes for most meters and once a day for some (`summary.readingIntervalMinutes` says which). This returns them with the usage of each interval (the difference to the previous reading), power factor, and optional hourly or daily totals. Usage only counts in a bucket the whole interval fits in, so a once-a-day meter has daily totals but no hourly ones. Without from/to you get the 7 days ending at the newest reading. A window is at most 31 days. History currently covers 1 to 30 June 2026 (PROTOCOL.md 3.3). Times are IST (+05:30).",
         "tags": [
           "Meters"
         ],
@@ -2106,7 +2106,14 @@
                                   "type": "null"
                                 }
                               ],
-                              "description": "The half hour with the highest usage."
+                              "description": "The half hour with the highest usage (null for a once-a-day meter)."
+                            },
+                            "readingIntervalMinutes": {
+                              "description": "The meter's usual minutes between readings: 30, or 1440 when it is read once a day.",
+                              "type": [
+                                "number",
+                                "null"
+                              ]
                             },
                             "firstReadingAt": {
                               "anyOf": [
@@ -2139,6 +2146,7 @@
                             "powerFactor",
                             "voltageR",
                             "peak",
+                            "readingIntervalMinutes",
                             "firstReadingAt",
                             "lastReadingAt"
                           ],
@@ -2153,11 +2161,11 @@
                                 "properties": {
                                   "timestamp": {
                                     "type": "string",
-                                    "description": "When the registers were read. This reading closes the half hour before it."
+                                    "description": "When the registers were read. This reading closes the interval before it."
                                   },
                                   "intervalStart": {
                                     "type": "string",
-                                    "description": "Start of the half hour this reading's usage belongs to (timestamp - 30 min)."
+                                    "description": "Start of the interval this reading's usage belongs to (timestamp - intervalMinutes)."
                                   },
                                   "kwhRegister": {
                                     "type": "number",
@@ -2171,8 +2179,12 @@
                                     "type": "number",
                                     "description": "R-phase voltage, volts."
                                   },
+                                  "intervalMinutes": {
+                                    "type": "number",
+                                    "description": "Length of the interval: 30 for a half-hourly meter, 1440 for a once-a-day meter, longer after a gap."
+                                  },
                                   "intervalKwh": {
-                                    "description": "kWh used in the half hour; null when the previous reading is missing or the register went down.",
+                                    "description": "kWh used in the interval; null for the first reading or when the register went down.",
                                     "type": [
                                       "number",
                                       "null"
@@ -2198,6 +2210,7 @@
                                   "kwhRegister",
                                   "kvahRegister",
                                   "voltageR",
+                                  "intervalMinutes",
                                   "intervalKwh",
                                   "intervalKvah",
                                   "powerFactor"

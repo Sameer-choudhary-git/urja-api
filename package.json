@@ -22,7 +22,8 @@
     "openapi": "tsx scripts/export-openapi.ts",
     "bench:nearby": "tsx scripts/bench-nearby.ts",
     "cross-check": "tsx --env-file=.env scripts/cross-check.ts",
-    "dump-page": "tsx --env-file=.env scripts/dump-page.ts"
+    "dump-page": "tsx --env-file=.env scripts/dump-page.ts",
+    "verify": "tsx --env-file=.env scripts/verify-parity.ts"
   },
   "dependencies": {
     "compression": "^1.8.2",

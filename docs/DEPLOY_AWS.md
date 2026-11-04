@@ -46,7 +46,7 @@ git remote add origin https://github.com/<you>/urja-api.git
 git push -u origin main
 ```
 
-On GitHub, open the **Actions** tab: the CI run (typecheck, 217 tests, build,
+On GitHub, open the **Actions** tab: the CI run (typecheck, 225 tests, build,
 Docker build) should go green within a few minutes.
 
 ## 2. Launch the instance (AWS console)
@@ -154,7 +154,7 @@ yours: remove it from `API_KEYS`, then `docker compose up -d --force-recreate ap
 
 | Task | Command (in `~/urja-api`) |
 |---|---|
-| Deploy a new version | `git pull && docker compose up -d --build` |
+| Deploy a new version | `git push` (with 7a set up), or on the server `bash deploy/deploy.sh` |
 | Change `.env` | edit, then `docker compose up -d --force-recreate api` |
 | Logs | `docker compose logs --tail 100 api` (JSON, one line per request) |
 | Status and memory | `docker compose ps`, `docker stats --no-stream` |
@@ -164,6 +164,55 @@ yours: remove it from `API_KEYS`, then `docker compose up -d --force-recreate ap
 Stopping the EC2 instance in the console stops the billing for compute (the
 disk is still billed, a few cents a month). **Terminate** it when you are
 completely done.
+
+## 7a. Deploy automatically on push (GitHub Actions)
+
+After this, `git push` to `main` is the whole deploy: CI runs the tests, and
+only if they pass, a second workflow SSHes into the instance and runs
+`deploy/deploy.sh` (`git pull --ff-only`, `docker compose up -d --build`,
+wait for `/ready`, print `/health`). A failed deploy shows red in the
+Actions tab with the API's last log lines.
+
+```
+git push ──▶ CI (typecheck, tests, build, docker) ──green──▶ Deploy ──ssh──▶ EC2: deploy/deploy.sh
+```
+
+**1. A deploy key that can only deploy** (on the server):
+
+```bash
+ssh-keygen -t ed25519 -f ~/gh_deploy -N "" -C github-deploy
+# Lock the key to the deploy script: it cannot open a shell or run anything else.
+echo "command=\"bash /home/ubuntu/urja-api/deploy/deploy.sh\",no-port-forwarding,no-agent-forwarding,no-X11-forwarding,no-pty $(cat ~/gh_deploy.pub)" >> ~/.ssh/authorized_keys
+cat ~/gh_deploy        # copy the whole PRIVATE key (BEGIN ... END lines included)
+rm ~/gh_deploy ~/gh_deploy.pub
+```
+
+**2. Secrets on GitHub:** repo → Settings → Secrets and variables → Actions →
+New repository secret, three times:
+
+| Name | Value |
+|---|---|
+| `EC2_HOST` | the instance's public IP, e.g. `15.252.70.41` (use an Elastic IP so it does not change) |
+| `EC2_USER` | `ubuntu` |
+| `EC2_SSH_KEY` | the private key from step 1 |
+
+**3. The workflow:** move `deploy/deploy.yml` to `.github/workflows/deploy.yml`,
+commit and push.
+
+**4. Let GitHub reach SSH.** GitHub's runners connect from changing IP
+addresses, so "SSH from My IP" blocks them. For this review setup, change the
+SSH rule in the security group to `0.0.0.0/0`. That is acceptable here because
+Ubuntu on EC2 only accepts key logins (no passwords), your own key and the
+locked deploy key are the only keys, and the deploy key can run nothing but
+the deploy script. A stricter alternative is a self-hosted runner on the
+instance (no inbound SSH at all), or having the workflow add its own IP to the
+security group for the duration of the job with AWS credentials; both are more
+setup than this assignment needs.
+
+Test it: Actions tab → Deploy → **Run workflow**, or push any commit to
+`main`. Never edit tracked files on the server: `git pull --ff-only` then
+refuses and the deploy fails (on purpose, instead of overwriting the edit).
+`.env` is untracked and is never touched.
 
 ## 8. Troubleshooting
 
@@ -190,7 +239,7 @@ what this assignment needs, so they are described, not scripted.
 ## Security checklist
 
 - [ ] `.env` is not in git (`git check-ignore -v .env` prints a rule) and is `chmod 600` on the server
-- [ ] SSH (22) is open to your IP only; port 3000 is not open at all
+- [ ] SSH (22) is open to your IP only (or to 0.0.0.0/0 with key-only login and the locked deploy key, see 7a); port 3000 is not open at all
 - [ ] Reviewer has their own key, sent privately
 - [ ] The API container runs as a non-root user on a read-only filesystem (`docker compose exec api id`)
 - [ ] The instance is stopped or terminated after the review

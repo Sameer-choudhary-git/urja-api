@@ -49,7 +49,7 @@ search, anomaly detection and transformer loading.
 | Robustness | Circuit breaker and concurrency limit around the portal, chaos tests, graceful shutdown, `/health` and `/ready` |
 | HTTP | Express 5, 19 routes (17 under `/v1`, plus `/health` and `/ready`), one route declaration drives validation, types and OpenAPI; API keys; rate limit; RFC 9457 errors; ETags; CORS |
 | Ops | Multi-stage Docker image (non-root, read-only filesystem), Compose with an nginx gateway, GitHub Actions CI, EC2 deploy guide |
-| Tests | 217 tests (vitest + supertest) against an in-process fake portal built from PROTOCOL.md; no network needed |
+| Tests | 225 tests (vitest + supertest) against an in-process fake portal built from PROTOCOL.md; no network needed |
 
 ## Who it is for, and why the responses are rich
 
@@ -230,6 +230,7 @@ Conventions:
 | `npm run scan -- <file>` | no | Data-quality report for an export file (`--json` for machine output) |
 | `npm run probe` | yes | Read-only checks for the open questions in PROTOCOL.md section 6 |
 | `npm run cross-check` | yes | Compares the signed export with the fallback path (`--all` for every meter) |
+| `npm run verify` | yes | **Parity check: the API returns everything the portal has.** Every meter, transformer and energy row from the real portal against a running API (`--api http://<host>`, `--all` for every meter's readings, `--meters J100040`). Exit code 1 on any unexplained difference |
 | `npm run dump-page -- <id>` | yes | Prints one meter's decoded `__data.json` page data (for odd pages) |
 | `npm run bench:nearby` | no | Grid index vs full scan for nearby search, 403 to 100k meters |
 
@@ -290,10 +291,10 @@ src/
     routes.ts            the 19 routes
     context.ts           what handlers may use (catalog read, clock), freshness headers
   main.ts                composition root: config -> portal -> catalog -> app -> listen
-scripts/                 smoke, fetch-export, scan-export, probe, cross-check, bench-nearby, dev-offline, export-openapi
+scripts/                 smoke, fetch-export, scan-export, probe, cross-check, verify-parity, bench-nearby, dev-offline, export-openapi
 test/                    vitest suites, fake portal, small real-data fixture
 docs/                    architecture, testing guide, AWS deploy, API examples, web client spec
-deploy/                  nginx gateway config, EC2 setup script
+deploy/                  nginx gateway config, EC2 setup script, deploy.sh + deploy.yml (auto-deploy on push)
 Dockerfile, docker-compose.yml, .github/workflows/ci.yml
 ```
 
@@ -303,8 +304,14 @@ Dockerfile, docker-compose.yml, .github/workflows/ci.yml
   treated as read-only: no request changes anything there.
 - Portal timestamps have no zone and are IST (+05:30). India has no daylight
   saving, so a fixed offset is exact.
-- A reading at time t closes the half hour [t − 30 min, t). kWh and kVAh are
-  cumulative registers, so usage is the difference between readings.
+- A reading at time t closes the interval before it: [t − 30 min, t) for most
+  meters, [t − 1 day, t) for meters the portal reads once a day (detected per
+  meter from the usual step between readings, reported as
+  `summary.readingIntervalMinutes`). kWh and kVAh are cumulative registers, so
+  usage is the difference between readings, and usage across a gap is still
+  exact; it is kept as one longer interval. A bucket only counts usage whose
+  whole interval fits in it, so a once-a-day meter has daily totals but no
+  hourly ones, and it is left out of half-hourly transformer loading.
 - `/portal/dts` is the dedicated transformer list, so its names are canonical
   where the meter records disagree (DT-007).
 - The portal data looks static (history ends on 30 June 2026), but nothing

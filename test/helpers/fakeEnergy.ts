@@ -41,8 +41,12 @@ export function generateEnergy(meterId: string): FakeEnergyRow[] {
       });
     }
   }
-  return rows;
+  // Like the real portal, some meters are read only once a day (at 00:00).
+  return DAILY_METERS.has(meterId) ? rows.filter((row) => row.timestamp.endsWith(" 00:00")) : rows;
 }
+
+/** Meters the real portal reads once a day (J100040 seen in the portal UI, 2026-11-04). */
+const DAILY_METERS = new Set(["J100040"]);
 
 const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
 const dayOf = (timestamp: string) => `${timestamp.slice(6, 10)}-${timestamp.slice(3, 5)}-${timestamp.slice(0, 2)}`;
