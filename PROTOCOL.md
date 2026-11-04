@@ -188,13 +188,16 @@ What this shows:
 - **One request is not capped**: a 30-day range returns all 1440 rows (about 115 KB, estimated from the 7-day size). A range wider than the data is clipped to it, not rejected.
 - The default (no query) window starts at 23:30 the day before, which is why it has 337 rows and not 336.
 - An empty or reversed range is a normal `200` with an empty list, not an error.
-- **Not every meter is half-hourly.** Seen with `npm run verify` on
-  2026-11-04: of the first 115 meters compared, 40 had 1440 half-hourly rows
-  for June and **75 (J100040 to J100115) had one reading a day**, at 00:00 (30
-  rows), in the same shape (`timestamp`, `kwh`, `kvah`, `voltR`). The portal's
-  own meter page shows the same daily rows. The rest of the fleet was not
-  compared in that run (see the rate limit below), so the cadence has to be
-  detected per meter, never assumed.
+- **Not every meter is half-hourly.** A full `npm run verify -- --all` on
+  2026-11-04 compared all 403 meters: only **40 (J100000 to J100039) have
+  1440 half-hourly rows** for June; the other **363 (J100040 to J100402) have
+  one reading a day**, at 00:00 (30 rows), in the same shape (`timestamp`,
+  `kwh`, `kvah`, `voltR`). 40 × 1440 + 363 × 30 = 68,490 readings, plus 5 rows
+  with non-numeric values = 68,495 portal rows. The portal's own meter page
+  shows the same daily rows. So the cadence has to be detected per meter,
+  never assumed (full result: [`docs/VERIFY_RESULT.md`](docs/VERIFY_RESULT.md)).
+  A consequence: half-hourly transformer load and spike checks only have data
+  for transformers that feed at least one half-hourly meter.
 - **Values are not always numbers.** J100089 had one row (index 30 of June)
   whose `kwh` and `voltR` were not decimal strings, while the rest of the
   month was normal.

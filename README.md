@@ -17,6 +17,7 @@ search, anomaly detection and transformer loading.
 | [`REFLECTION.md`](REFLECTION.md) | What was hard, what I would change, how AI was used |
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Layers, diagrams and a dry run of one request |
 | [`docs/TESTING_GUIDE.md`](docs/TESTING_GUIDE.md) | Module-by-module manual checks with expected results |
+| [`docs/VERIFY_RESULT.md`](docs/VERIFY_RESULT.md) | Result of `npm run verify -- --all`: the API against the live portal, every meter (PASS) |
 | [`docs/DEPLOY_AWS.md`](docs/DEPLOY_AWS.md) | Running it on one EC2 instance with Docker Compose |
 | [`docs/api-examples.md`](docs/api-examples.md) | Real responses for every route |
 | [`docs/WEB_CLIENT_SPEC.md`](docs/WEB_CLIENT_SPEC.md) | Spec for a web client built on this API |
@@ -112,14 +113,28 @@ npm test                  # 231 tests, offline, about 10 s
 npm run dev               # http://localhost:3000, reads .env
 ```
 
-The log shows `catalog.refreshed ... "meters":403` after a few seconds. Then:
+`npm run dev` prints one JSON log line per event. Within a few seconds you
+see these three. They mean: it logged in to the portal, downloaded all 403
+meters through the signed export, and built its in-memory catalog. From that
+moment the API answers requests:
+
+```
+{"level":"info","msg":"portal.session.established", ...}
+{"level":"info","msg":"portal.export.ok", ... "meters":403}
+{"level":"info","msg":"catalog.refreshed", ... "meters":403, ...}
+```
+
+If you see `catalog.refresh_failed` with a login error instead, check
+`PORTAL_EMAIL` and `PORTAL_PASSWORD` in `.env`. Then:
 
 - Swagger UI: http://localhost:3000/docs → **Authorize** → paste the reviewer key → try any route.
 - Or the [sample request](#sample-request-and-response) below.
 - Optional, the strongest check: `npm run verify -- --all` compares every
   meter, transformer and energy row of the live portal with what this API
-  returns, and ends with `PASS` (about 10–15 minutes; it is slow on purpose,
-  the portal rate limits).
+  returns, and ends with `PASS` (about 5 minutes; it is slow on purpose,
+  the portal rate limits). Don't want to wait? The full output of a real run
+  is in [`docs/VERIFY_RESULT.md`](docs/VERIFY_RESULT.md): 403/403 meters,
+  40/40 transformers, 68,495 portal rows with 0 missing and 0 changed.
 
 (Windows PowerShell: `cp` works as is; use `curl.exe` instead of `curl`.)
 
@@ -270,7 +285,7 @@ Conventions:
 | `npm run scan -- <file>` | no | Data-quality report for an export file (`--json` for machine output) |
 | `npm run probe` | yes | Read-only checks for the open questions in PROTOCOL.md section 6 |
 | `npm run cross-check` | yes | Compares the signed export with the fallback path (`--all` for every meter) |
-| `npm run verify` | yes | **Parity check: the API returns everything the portal has.** Every meter, transformer and energy row from the real portal against a running API (`--api http://<host>`, `--all` for every meter's readings, `--meters J100040`). Exit code 1 on any unexplained difference |
+| `npm run verify` | yes | **Parity check: the API returns everything the portal has.** Every meter, transformer and energy row from the real portal against a running API (`--api http://<host>`, `--all` for every meter's readings, `--meters J100040`). Exit code 1 on any unexplained difference. A full run's output: [`docs/VERIFY_RESULT.md`](docs/VERIFY_RESULT.md) |
 | `npm run dump-page -- <id>` | yes | Prints one meter's decoded `__data.json` page data (for odd pages) |
 | `npm run bench:nearby` | no | Grid index vs full scan for nearby search, 403 to 100k meters |
 
@@ -333,7 +348,7 @@ src/
   main.ts                composition root: config -> portal -> catalog -> app -> listen
 scripts/                 smoke, fetch-export, scan-export, probe, cross-check, verify-parity, bench-nearby, dev-offline, export-openapi
 test/                    vitest suites, fake portal, small real-data fixture
-docs/                    architecture, testing guide, AWS deploy, API examples, web client spec
+docs/                    architecture, testing guide, verify result, AWS deploy, API examples, web client spec
 deploy/                  nginx gateway config, EC2 setup script, deploy.sh + deploy.yml (auto-deploy on push)
 Dockerfile, docker-compose.yml, .github/workflows/ci.yml
 ```
