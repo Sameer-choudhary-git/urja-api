@@ -122,7 +122,7 @@ export class CatalogService {
   private async load(): Promise<CatalogSnapshot> {
     const started = this.now();
     try {
-      const next = await this.loader.load();
+      const next = await this.loader.load(); // cataloglover ->load() : snapshot
       const previous = this.current;
       this.current = next; // atomic swap
       this.lastRefreshMs = this.now() - started;
