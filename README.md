@@ -31,7 +31,6 @@ layer, freshness, robustness, full dataset, web client), plus some extras. See
 | [`docs/VERIFY_RESULT.md`](docs/VERIFY_RESULT.md) | Result of `npm run verify -- --all`: the API against the live portal, every meter (PASS) |
 | [`docs/DEPLOY_AWS.md`](docs/DEPLOY_AWS.md) | Running it on one EC2 instance with Docker Compose |
 | [`docs/api-examples.md`](docs/api-examples.md) | Real responses for every route |
-| [`docs/WEB_CLIENT_SPEC.md`](docs/WEB_CLIENT_SPEC.md) | Spec for a web client built on this API |
 
 ## Contents
 
@@ -360,7 +359,7 @@ src/
   main.ts                composition root: config -> portal -> catalog -> app -> listen
 scripts/                 smoke, fetch-export, scan-export, probe, cross-check, verify-parity, bench-nearby, dev-offline, export-openapi
 test/                    vitest suites, fake portal, small real-data fixture
-docs/                    architecture, extras, testing guide, verify result, AWS deploy, API examples, web client spec
+docs/                    architecture, extras, testing guide, verify result, AWS deploy, API examples
 deploy/                  nginx gateway config, EC2 setup script, deploy.sh + deploy.yml (auto-deploy on push)
 Dockerfile, docker-compose.yml, .github/workflows/ci.yml
 ```
@@ -613,8 +612,7 @@ Being honest about where it stops fitting:
 - **The web client in this repo.** It lives in its own repo
   ([urja-v0-frontend](https://github.com/Sameer-choudhary-git/urja-v0-frontend),
   live at https://urja-umber.vercel.app), so the API stays the deliverable
-  here and the two deploy separately (EC2 and Vercel). It was built from
-  `docs/WEB_CLIENT_SPEC.md`.
+  here and the two deploy separately (EC2 and Vercel).
 - **Machine-learning anomaly detection.** Explainable rules with named
   thresholds are easier to trust and argue with, and one month of
   synthetic-looking data is too little to train anything on.

@@ -10,3 +10,6 @@ coverage/
 # Local data captured from the portal
 fixtures/local/
 *.log
+
+# Local working notes, not part of the submission
+docs/WEB_CLIENT_SPEC.md
