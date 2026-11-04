@@ -1,94 +1,126 @@
-<!--
-DRAFT. Rewrite every paragraph in your own words before you submit, and
-delete this comment. The facts are taken from the build; the voice and the
-opinions have to be yours, because the follow-up conversation will ask
-about them.
--->
-
 # Reflection
 
-## What assumptions did you make?
+## What assumptions did I make?
 
-The portal's timestamps carry no timezone, so I read them as IST (+05:30).
-India has no daylight saving, which makes a fixed offset exact rather than
-an approximation. I assumed `kwh` and `kvah` are cumulative registers (they
-only ever go up, with one exception the code reports), so the usage in a half
-hour is the difference between two readings, and the reading at 00:30 closes
-the interval 00:00 to 00:30. Where the export and `/portal/dts` disagree on a
-transformer's name (DT-007), I trusted `/portal/dts` because it is the
-dedicated list, and kept the other name as an alias with an issue on the
-affected meters. I assumed the account in the brief is a normal read-only
-user, so the service never writes to the portal. The data looks frozen (all
-history is June 2026), but I did not build on that: the catalog refreshes
-every 15 minutes and the readings cache TTL follows how old the data is, so
-new meters or readings would appear without a code change. The full list is
-in the README under "Assumptions".
+- **Time zone.** The portal's timestamps have no time zone, so I read them as
+  IST (+05:30). India has no daylight saving, so a fixed offset is exact, not
+  a guess.
+- **Readings are running totals.** `kwh` and `kvah` only ever go up, so I
+  treated them as cumulative registers. The usage in a half hour is the
+  difference between two readings, and the reading at 00:30 closes the period
+  00:00 to 00:30.
+- **Which name wins.** When the export and `/portal/dts` disagree on a
+  transformer's name (DT-007), I trusted `/portal/dts`, because it is the
+  portal's own transformer list. I kept the other name as an alias and marked
+  the affected meters with an issue.
+- **Read-only.** I assumed the account in the brief is a normal read-only
+  user, so the service never writes anything to the portal.
+- **The data might change.** All the history is from June 2026, so the data
+  looks frozen. I did not rely on that. The catalog refreshes every 15
+  minutes and the readings cache lifetime follows the age of the data, so new
+  meters or readings would show up without a code change.
 
-## Which part was the most difficult, and how did you get unstuck?
+The full list is in the README under "Assumptions".
 
-Finding the data paths. The UI shows a paginated meter table and detail pages,
-so the obvious route is 21 search pages plus a detail and a geo call per
-meter, about 830 requests. Watching the network tab while clicking the export
-button showed a signed request: the browser first fetches a secret from
-`/portal/keys`, then sends `x-timestamp` and `x-signature` headers. I worked
-out the signing scheme by recomputing HMAC-SHA256 offline over captured
-requests until my signatures matched the browser's exactly, then confirmed
-that the secret stays the same across logins. After that, one call returns
-all 403 meters. The second hard part was the detail page's `__data.json`,
-which uses SvelteKit's devalue format (a flat array where numbers are indexes
-back into the array). Reading devalue's source and writing a small decoder
-that fails loudly on anything unexpected got me through it, and the live
-cross-check later showed a second detail shape (`classData`, a JSON string)
-that the decoder now handles too.
+## Which part was the most difficult, and how did I get unstuck?
 
-## If you had another day, what would you improve?
+**Finding a good way to get the data out.** The UI shows a paged meter table
+and a detail page per meter. The obvious route is 21 search pages plus a
+detail call and a geo call for every meter, about 830 requests. When I
+watched the network tab while clicking the export button, I saw a signed
+request: the browser first gets a secret from `/portal/keys`, then sends
+`x-timestamp` and `x-signature` headers. I worked out the signing scheme by
+computing HMAC-SHA256 myself over captured requests until my signatures
+matched the browser's exactly. Then I checked that the secret stays the same
+across logins. After that, one call gives all 403 meters.
 
-I would ingest readings in the background into a time-series store, so that
-an anomaly scan over many meters does not need one portal call per meter at
-request time. Today a scan is capped at 50 meters and runs at most 4 portal
-calls at once, which is polite to the portal but slow for a whole-fleet view.
-I would also add metrics (portal latency, breaker state, cache hit rate) next
-to the JSON logs, and schedule the read-only probe against the live portal so
-that a change in a response shape raises an alert instead of a user-facing
-error.
+**Reading the detail pages.** The detail page's `__data.json` uses
+SvelteKit's devalue format, a flat array where numbers point back to other
+positions in the same array. I read devalue's source and wrote a small
+decoder that fails loudly on anything it does not expect. Later the live
+cross-check showed a second detail shape (`classData`, a JSON string), and the
+decoder handles that too now. This path is the fallback if the signed export
+ever breaks.
 
-## What mistake did you make while solving this?
+## What mistakes did I make?
 
-I assumed every meter's detail page has the same shape. The fake portal in my
-tests was built from the first pages I looked at, all of which had a
-`detail.data` list, so the tests passed. The first live cross-check crashed on
-meter J100020, whose page carries the detail as a JSON-encoded `classData`
-string with different field names. The lesson was that a fake built from a few
-samples tests my assumptions, not the real system. I fixed the schema and the
-parser, made the cross-check collect per-meter failures instead of stopping at
-the first one, and added a `dump-page` script to inspect odd pages. A smaller
-one: JavaScript's `Date.parse` silently rolls `2026-02-31` over to 3 March, so
-an invalid date in a query was accepted; I now validate the calendar date
-myself.
+**I trusted my own fake portal too much.** My tests use a fake portal that I
+built from the first few detail pages I looked at. All of them had a
+`detail.data` list, so the tests passed. The first live cross-check then
+crashed on meter J100020, whose page has the detail as a `classData` string
+with different field names. The lesson: a fake built from a few samples only
+tests my assumptions, not the real system. I fixed the schema and the parser,
+changed the cross-check to collect failures per meter instead of stopping at
+the first one, and added a `dump-page` script to look at odd pages.
 
-## If you were reviewing your own submission, what would you criticise?
+**I assumed every meter is read every half hour.** The meters I tested with
+early on all were, so I built the readings logic around 30-minute intervals.
+When I ran the full parity check (`npm run verify -- --all`) against every
+meter, I found that 363 of the 403 meters are read only once a day. The same
+run also hit the portal's rate limit (HTTP 429 after about 230 calls in 6
+seconds) and found one meter (J100089) with a value that is not a number. I
+changed the service to detect each meter's reading rhythm from its data, to
+wait and retry properly on a 429 without opening the circuit breaker, and to
+report the bad value as an issue instead of failing the whole month. Running
+against **all** the real data, not a sample, is what found all three.
 
-Some of it could look heavy for 403 meters. I designed the API for several
-consumers at once (field operations, data analysts, planning, revenue
-protection), which is why responses carry facets, full network paths,
-data-quality issues and derived reading values; the README maps each of those
-to the team that needs it. I kept the infrastructure small on purpose (one
-process, no database, no Redis). Even so, the circuit breaker, concurrency
-limiter, grid index and fallback data path are each more code to maintain, and
-a reviewer could fairly ask whether all of them were needed on day one. The fake portal is my own reading of the protocol, so the
-tests prove internal consistency, not that the real portal behaves that way;
-only the probe and cross-check scripts touch the real thing, and they are run
-by hand. Transformer loading is a lower bound with a synthetic-looking
-dataset, so the numbers should not be read as real engineering advice. And the
-anomaly thresholds are reasonable defaults rather than values agreed with
-someone who operates a distribution network.
+**A small one.** JavaScript's `Date.parse` quietly turns `2026-02-31` into
+3 March, so an impossible date in a query was accepted. I now check calendar
+dates myself and return a 400.
 
-## How AI was used
+## If I had more time, what would I improve?
 
-I used an AI assistant (Claude) as a guide and pair programmer: to discuss
-approaches, review my reasoning, explain unfamiliar pieces (devalue, Express 5
-error handling, zod to OpenAPI), and draft code and documents that I then ran,
-tested and changed. The portal investigation itself (network tab, captured
-requests, running the probe, cross-check and dump-page scripts against the
-live portal, reading their output) was done by me, since the assistant had no
-access to the portal. I can walk through any file and the reason behind it.
+- **Roles and proper auth, for the API and the frontend.** Today every
+  consumer has one static API key with the same access. I would add users and
+  roles (for example field staff, analysts, admins), log in through OAuth/OIDC,
+  and give each role only the routes and data it needs. The frontend would get
+  real sign-in and show different things to different roles.
+- **Dedicated dashboards per team.** The web client has one general view. I
+  would build focused dashboards: a field-operations map of faulty meters, a
+  planning view of transformer loading over time, a revenue-protection view
+  of anomalies, and a data-quality view for data owners.
+- **More than one server.** Right now there is one instance on one EC2
+  machine. I would run several instances behind a load balancer, move the
+  rate-limit counters and the readings cache to Redis so they are shared, and
+  add HTTPS with a real domain.
+- **Better logging and monitoring.** Today there are JSON logs per container.
+  I would send them to one central place (for example CloudWatch or Grafana
+  Loki), add metrics (portal latency, breaker state, cache hit rate, error
+  rates), tracing across the frontend and the API, and alerts when something
+  goes wrong.
+- **Background ingestion of readings.** Readings are fetched from the portal
+  when someone asks. An anomaly scan over a transformer needs one portal call
+  per meter, so it is capped at 50 meters. I would pull readings in the
+  background into a time-series store (TimescaleDB), so fleet-wide scans and
+  long date ranges are fast and do not depend on the portal at request time.
+- **Watching the portal for changes.** I would run the read-only probe on a
+  schedule, so a change in the portal's responses raises an alert before a
+  user sees an error.
+
+## If I were reviewing my own submission, what would I criticise?
+
+- **It may look heavy for 403 meters.** I designed the API for several teams
+  at once, which is why responses include facets, full network paths,
+  data-quality issues and worked-out reading values. The README maps each of
+  those to the team that needs it. I kept the infrastructure small on purpose
+  (one process, no database, no Redis). Still, the circuit breaker,
+  concurrency limiter, grid index and fallback path are each more code to
+  maintain, and it is fair to ask whether all of them were needed on day one.
+- **The tests prove consistency, not reality.** The fake portal is my reading
+  of the protocol. Only the probe, cross-check and verify scripts touch the
+  real portal, and they are run by hand, not in CI.
+- **Some numbers are estimates.** Transformer loading is a lower bound (it
+  cannot see line losses or unmetered load), and the anomaly thresholds are
+  sensible defaults, not values agreed with someone who runs a distribution
+  network.
+
+## How I used AI
+
+I used an AI assistant (Claude) as a guide and pair programmer. It helped me
+compare approaches, check my reasoning, explain things I had not used before
+(devalue, Express 5 error handling, generating OpenAPI from zod), and draft
+code and documents. I ran everything myself, tested it against the live
+portal from my machine (the assistant had no access to the portal), and
+changed what did not match reality, such as the second detail-page shape and
+the once-a-day meters above. I went through the code module by module, with
+flow diagrams, until I could explain each file and why it is built that way.
