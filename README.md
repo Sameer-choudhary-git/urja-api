@@ -106,6 +106,7 @@ is published here on purpose; it will be removed after the review.
 ```bash
 git clone <this repo> && cd urja-api
 cp .env.example .env      # then set PORTAL_EMAIL and PORTAL_PASSWORD (the account from the brief)
+# (Important) add above key in .env as API_KEYS=tester:uKmXzDqwVrlosCHMOThjrkJeeILTQop6
 npm ci
 npm test                  # 231 tests, offline, about 10 s
 npm run dev               # http://localhost:3000, reads .env
