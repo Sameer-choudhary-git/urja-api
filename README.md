@@ -44,6 +44,7 @@ too. [`docs/EXTRAS.md`](docs/EXTRAS.md) lists each one and shows how to try it.
 - [Scripts](#scripts)
 - [Structure](#structure)
 - [Assumptions](#assumptions)
+- [Historical data today, ready for live data](#historical-data-today-ready-for-live-data)
 - [Design decisions and trade-offs](#design-decisions-and-trade-offs)
 - [Data quality](#data-quality)
 - [Where this would struggle at scale](#where-this-would-struggle-at-scale)
@@ -406,6 +407,21 @@ Dockerfile, docker-compose.yml
   can tune them.
 - Transformer load assumes each meter's kVAh belongs to its transformer and
   ignores line losses, so it is a lower bound.
+
+## Historical data today, ready for live data
+
+The portal only holds history right now: 403 meters and readings from 1 to 30
+June 2026. Nothing new arrives. **The service does not rely on that.** It is
+built as if new meters and new readings will keep coming, and it handles both
+without a code change or a restart:
+
+| If the portal starts adding... | What the service does |
+|---|---|
+| New meters or transformers | The catalog is re-read from the portal every 15 minutes (in the background, while the old copy keeps serving). New meters appear in every route within 15 minutes, and each refresh logs how many meters were added, removed or changed |
+| Changed meter data (status, location, network) | Same refresh: the new snapshot replaces the old one in one step, so no request ever sees half old, half new data |
+| New readings | The readings cache lifetime follows the age of the data. Old history is kept for 1 hour. Live data is kept only until the next reading is due (at most 5 minutes), so new readings show up almost at once |
+| Readings beyond 30 June | Nothing is hard-coded to June. With no `from`/`to`, a request returns the 7 days ending at the meter's newest reading, whatever date that is. Any window up to 31 days works |
+| More meters overall | Indexes, facets and the nearby grid are rebuilt with every snapshot. The limits of the in-memory design are in [Where this would struggle at scale](#where-this-would-struggle-at-scale) |
 
 ## Design decisions and trade-offs
 
